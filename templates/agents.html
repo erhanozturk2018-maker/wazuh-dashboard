@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agents — Wazuh Console</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+<div class="shell">
+
+  <!-- ============ Sidebar ============ -->
+  {% include "_sidebar.html" %}
+
+  <!-- ============ Main ============ -->
+  <div class="main">
+    <div class="main-inner" id="main-content" tabindex="-1">
+      <div class="settings-wrap">
+
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Agents</h1>
+          <p class="page-sub">Agents registered on the Wazuh manager. Click a row for details, its key, or removal.</p>
+        </div>
+        <button type="button" class="btn btn-ghost" id="agents-refresh">
+          <svg data-lucide="refresh-cw"></svg> Refresh
+        </button>
+      </div>
+
+      <div id="agents-msg" class="msg" style="display:none; margin:0 0 var(--s4);"></div>
+
+      <!-- Add agent — secondary path: authd auto-enrollment is the normal one -->
+      <div class="scard add-card" style="margin-bottom: var(--s4);">
+        <div class="scard-head">
+          <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+          <div class="item-summary">
+            <h2 class="scard-title">Add agent manually</h2>
+            <p class="scard-desc">Registers a new agent on the manager and returns its key once.</p>
+          </div>
+        </div>
+        <div class="scard-body">
+          <div class="notice">
+            <svg data-lucide="info"></svg>
+            <span>Auto-enrollment is active on this manager (port 1515) — most agents
+            register themselves automatically. Use this form only if auto-enrollment is
+            disabled or you need a fixed key in advance.</span>
+          </div>
+
+          <form id="agent-add-form">
+            <div class="f2">
+              <div class="f">
+                <label for="agent-add-ip">IP address <span class="soft">· required</span></label>
+                <input type="text" id="agent-add-ip" name="ip" class="mono" placeholder="192.168.X.X">
+                <div class="hint">An IPv4 address, a CIDR range (<code>192.168.X.0/24</code>), or <code>any</code>.</div>
+              </div>
+              <div class="f">
+                <label for="agent-add-name">Name <span class="soft">· required</span></label>
+                <input type="text" id="agent-add-name" name="name" class="mono" placeholder="kali-test">
+                <div class="hint">Letters, digits, dot, underscore and hyphen only.</div>
+              </div>
+            </div>
+            <div class="item-form-actions">
+              <button type="submit" class="btn btn-primary"><svg data-lucide="plus"></svg> Add agent</button>
+            </div>
+          </form>
+
+          <!-- Filled in after a successful add: id + key, shown once -->
+          <div id="agent-add-result" class="agent-key-box" hidden></div>
+        </div>
+      </div>
+
+      <!-- Agents card -->
+      <div class="alerts-card">
+        <div class="alerts-head">
+          <span class="alerts-title">Registered agents</span>
+          <span class="alerts-count" id="agents-count">0</span>
+          <span class="alerts-status" id="agents-status">loading…</span>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>IP</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="agents-body">
+              <tr><td colspan="4">
+                <div class="tbl-empty">
+                  <div class="ei"><svg data-lucide="server"></svg></div>
+                  <div class="et">Loading agents</div>
+                  <div class="es">Fetching the agent list from the manager over SSH.</div>
+                </div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!--
+        Groups. Kept below the agent list because groups organise agents
+        rather than being them, but on this page rather than a separate
+        one: a group is a property of the agents in it, and splitting the
+        two would mean managing "which agents exist" and "how they are
+        grouped" in different places.
+
+        What a group is FOR lives on the Pipeline page - a group's
+        agent.conf is what actually gets distributed. This card owns the
+        group's existence and membership only.
+      -->
+      <div class="scard" id="groups-card" style="margin-top: var(--s6);">
+        <div class="scard-head">
+          <span class="scard-ic"><svg data-lucide="boxes"></svg></span>
+          <div>
+            <h2 class="scard-title">Agent groups</h2>
+            <p class="scard-desc">
+              Groups are how configuration is targeted at some agents and not others.
+              Each group's collectors are edited under
+              <a href="/pipeline?tab=collect">Pipeline → Group collectors</a>.
+            </p>
+          </div>
+          <span class="prov manager" title="Groups on the Wazuh manager, via the API">
+            <svg data-lucide="server"></svg> Manager · groups
+          </span>
+        </div>
+
+        <div class="glist">
+          <div class="glist-row add-row" data-item-card>
+            <div class="item-view">
+              <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+              <div class="item-summary">
+                <h3 class="scard-title">New group</h3>
+                <p class="scard-desc">Starts empty, with an empty shared configuration.</p>
+              </div>
+              <div class="item-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="group-add-toggle">
+                  <svg data-lucide="plus"></svg> New group
+                </button>
+              </div>
+            </div>
+            <div class="scard-body item-edit" id="group-add-panel" hidden>
+              <form id="group-add-form">
+                <div class="f">
+                  <label for="group-add-name">Group name <span class="soft">· required</span></label>
+                  <input type="text" id="group-add-name" name="name" class="mono"
+                         placeholder="ldap_servers" autocomplete="off">
+                  <div class="hint">
+                    Letters, digits, dot, underscore and hyphen only — the name becomes a
+                    directory on the manager.
+                  </div>
+                </div>
+                <div class="item-form-actions">
+                  <button type="button" class="btn btn-ghost" id="group-add-cancel">Cancel</button>
+                  <button type="submit" class="btn btn-primary">Create group</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div id="groups-body">
+            <div class="glist-empty"><div class="empty-mini">Loading groups…</div></div>
+          </div>
+        </div>
+      </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail drawer (same markup/ids as the Overview alert drawer) -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Agent details">
+  <div class="drawer-head">
+    <span class="drawer-title">Agent details</span>
+    <button type="button" class="drawer-close" id="drawer-close" aria-label="Close">
+      <svg data-lucide="x"></svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script>if (window.lucide) lucide.createIcons();</script>
+<script src="/static/js/app.js?v={{ asset_version('js/app.js') }}"></script>
+</body>
+</html>

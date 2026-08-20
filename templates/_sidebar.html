@@ -1,0 +1,67 @@
+{#
+  Shared navigation. Included by every logged-in page.
+
+  The active item is derived from request.url.path rather than from a
+  variable each route has to remember to pass - a route that forgot it
+  would render a sidebar with nothing highlighted, and that failure is
+  invisible until someone notices.
+
+  The two groups answer "what am I looking at?" versus "what am I
+  changing?", and within Configure the order follows a log's own journey:
+  it is collected and parsed (Pipeline), it produces notifications
+  (Alerting), and Console is this application's own settings rather than
+  the manager's.
+#}
+{% set path = request.url.path %}
+<aside class="sidebar">
+  <a class="sb-brand" href="/">
+    <span class="sb-logo"><svg data-lucide="shield-half"></svg></span>
+    <span>
+      <span class="sb-brand-name">Wazuh Console</span><br>
+      <span class="sb-brand-sub">alert monitor</span>
+    </span>
+  </a>
+
+  <div class="sb-section">Monitor</div>
+  <nav class="sb-nav">
+    <a href="/" class="sb-link {{ 'active' if path == '/' }}"
+       {{ 'aria-current=page' if path == '/' }}>
+      <svg data-lucide="activity"></svg> Overview
+    </a>
+    <a href="/agents" class="sb-link {{ 'active' if path.startswith('/agents') }}"
+       {{ 'aria-current=page' if path.startswith('/agents') }}>
+      <svg data-lucide="server-cog"></svg> Agents
+    </a>
+  </nav>
+
+  <div class="sb-section">Configure</div>
+  <nav class="sb-nav">
+    <a href="/pipeline" class="sb-link {{ 'active' if path.startswith('/pipeline') }}"
+       {{ 'aria-current=page' if path.startswith('/pipeline') }}>
+      <svg data-lucide="git-branch"></svg> Pipeline
+    </a>
+    <a href="/alerting" class="sb-link {{ 'active' if path.startswith('/alerting') }}"
+       {{ 'aria-current=page' if path.startswith('/alerting') }}>
+      <svg data-lucide="bell-ring"></svg> Alerting
+    </a>
+    <a href="/settings" class="sb-link {{ 'active' if path.startswith('/settings') }}"
+       {{ 'aria-current=page' if path.startswith('/settings') }}>
+      <svg data-lucide="sliders-horizontal"></svg> Console
+    </a>
+  </nav>
+
+  <div class="sb-spacer"></div>
+
+  <div class="sb-user">
+    <span class="sb-avatar">{{ username[:1] }}</span>
+    <span style="min-width:0;">
+      <span class="sb-user-name">{{ username }}</span><br>
+      <span class="sb-user-role">operator</span>
+    </span>
+    <form method="post" action="/logout" class="inline-form">
+      <button type="submit" class="sb-logout" title="Log out" aria-label="Log out">
+        <svg data-lucide="log-out"></svg>
+      </button>
+    </form>
+  </div>
+</aside>

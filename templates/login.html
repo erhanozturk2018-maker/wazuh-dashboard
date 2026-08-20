@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log in — Wazuh Console</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="sb-logo"><svg data-lucide="shield-half"></svg></span>
+      <div>
+        <h1 class="auth-h">Wazuh Console</h1>
+        <p class="auth-p">Sign in to view the alert stream</p>
+      </div>
+    </div>
+
+    {% if error %}<div class="msg msg-err">{{ error }}</div>{% endif %}
+    {% if message %}<div class="msg msg-ok">{{ message }}</div>{% endif %}
+
+    <form method="post" action="/login" class="auth-form">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required autofocus autocomplete="username">
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+
+      <button type="submit" class="btn btn-primary">Log in</button>
+    </form>
+
+    <div class="auth-alt">No account yet? <a href="/register">Create one</a></div>
+  </div>
+  <script>if (window.lucide) lucide.createIcons();</script>
+</body>
+</html>

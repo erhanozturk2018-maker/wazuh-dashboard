@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline — Wazuh Console</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+<div class="shell">
+
+  {% include "_sidebar.html" %}
+
+  <div class="main">
+    <div class="main-inner" id="main-content" tabindex="-1">
+      <div class="settings-wrap" id="pipeline-root">
+
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Pipeline</h1>
+            <p class="page-sub">
+              How logs reach the manager, and how it makes sense of them once they arrive.
+            </p>
+          </div>
+        </div>
+
+        {#
+          These are links, not client-side toggles. Each tab's data is
+          fetched from the manager only when that tab is open, because
+          preparing both on every render meant paying for calls the
+          operator may never look at against an API that can take tens of
+          seconds to answer.
+        #}
+        <div class="tabs" role="tablist" aria-label="Pipeline sections">
+          <a href="/pipeline?tab=collect" role="tab"
+             class="tab-btn {{ 'active' if tab == 'collect' }}"
+             aria-selected="{{ 'true' if tab == 'collect' else 'false' }}">
+            <svg data-lucide="download"></svg> Collect
+          </a>
+          <a href="/pipeline?tab=parse" role="tab"
+             class="tab-btn {{ 'active' if tab == 'parse' }}"
+             aria-selected="{{ 'true' if tab == 'parse' else 'false' }}">
+            <svg data-lucide="braces"></svg> Parse
+          </a>
+        </div>
+
+        {% if restart_failed %}
+          {# Written, not live. Deliberately not styled as an error: the
+             change IS saved, and calling it a failure would invite the
+             operator to re-apply something already applied. #}
+          <div class="msg msg-warn msg-action" style="margin:0 0 var(--s4);">
+            <span>{{ restart_failed_hint }}</span>
+            <button type="button" class="btn btn-sm" data-apply-changes>Apply changes</button>
+          </div>
+        {% elif saved %}
+          <div class="msg msg-ok" style="margin:0 0 var(--s4);">Changes saved.</div>
+        {% endif %}
+        {% if error %}
+          <div class="msg msg-err" style="margin:0 0 var(--s4);">{{ error }}</div>
+        {% endif %}
+
+        {# ==================== COLLECT ==================== #}
+        {% if tab == 'collect' %}
+        <div class="tab-panel active" role="tabpanel">
+
+          <p class="page-sub" style="margin:0 0 var(--s5);">
+            Everything here decides <strong>what the manager is told about</strong>.
+            Nothing is parsed or alerted on until it is collected first.
+          </p>
+
+          <!-- ---------- Log sources (<localfile>) ---------- -->
+          {% if localfiles_list_error %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">
+              Could not read the log sources from the manager: {{ localfiles_list_error }}
+            </div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="scroll-text"></svg></span>
+              <div>
+                <h2 class="scard-title">Log sources</h2>
+                <p class="scard-desc">
+                  Files the manager reads and commands it runs on itself.
+                </p>
+              </div>
+              <span class="prov manager" title="Written to ossec.conf on the Wazuh manager">
+                <svg data-lucide="server"></svg> Manager · ossec.conf
+              </span>
+            </div>
+
+            <div class="glist">
+              <div class="glist-row add-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">Add a log source</h3>
+                    <p class="scard-desc">A file to watch, or a command to run on a schedule.</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-edit-toggle>
+                      <svg data-lucide="plus"></svg> Add new
+                    </button>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/pipeline/localfiles" data-restarts-manager data-localfile-form>
+                    <input type="hidden" name="action" value="add">
+                    <div class="f">
+                      <label for="lf-format">Log format</label>
+                      <select id="lf-format" name="log_format" class="mono" data-lf-format>
+                        <option value="syslog">syslog — a plain text log file</option>
+                        <option value="json">json — a JSON log file</option>
+                        <option value="journald">journald — the systemd journal</option>
+                        <option value="full_command">full_command — run a command, keep all output</option>
+                        <option value="command">command — run a command, one line per result</option>
+                      </select>
+                    </div>
+
+                    {# A log source is either a file to read or a command
+                       to run; the two need different fields, and asking
+                       for a "location" on a command entry is what made
+                       the previous version unable to express them. #}
+                    <div data-lf-file>
+                      <div class="f">
+                        <label for="lf-location">Location</label>
+                        <input type="text" id="lf-location" name="location" class="mono"
+                               placeholder="/var/log/auth.log">
+                        <div class="hint">The path the manager reads, on the manager itself.</div>
+                      </div>
+                    </div>
+
+                    <div data-lf-command hidden>
+                      <div class="f">
+                        <label for="lf-command">Command</label>
+                        <input type="text" id="lf-command" name="command" class="mono"
+                               placeholder="systemctl is-active sshd">
+                      </div>
+                      <div class="f2">
+                        <div class="f">
+                          <label for="lf-alias">Alias <span class="soft">· required</span></label>
+                          <input type="text" id="lf-alias" name="alias" class="mono"
+                                 placeholder="sshd_status_check">
+                          <div class="hint">
+                            Names this entry and is what a decoder matches on with
+                            <code>program_name</code>. Without it the entry cannot be
+                            edited or removed later.
+                          </div>
+                        </div>
+                        <div class="f">
+                          <label for="lf-frequency">Frequency <span class="soft">· seconds</span></label>
+                          <input type="text" id="lf-frequency" name="frequency" class="mono"
+                                 placeholder="60">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Add log source</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {% for item in localfiles_list %}
+              <div class="glist-row">
+                <div class="item-view">
+                  <span class="scard-ic">
+                    <svg data-lucide="{{ 'terminal' if item.log_format in ('command', 'full_command') else 'file-text' }}"></svg>
+                  </span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">{{ item._id or "(unidentified)" }}</h3>
+                    <p class="scard-desc">
+                      {{ item.log_format or "—" }}{% if item.command %} · <span class="mono">{{ item.command[:70] }}{% if item.command|length > 70 %}…{% endif %}</span>{% endif %}{% if item.frequency %} · every {{ item.frequency }}s{% endif %}
+                    </p>
+                  </div>
+                  <div class="item-actions">
+                    {% if item._ambiguous %}
+                      <span class="state-pill off" title="Two entries share this identifier, so neither can be targeted safely.">
+                        <span class="sdot"></span> ambiguous
+                      </span>
+                    {% else %}
+                    <form method="post" action="/pipeline/localfiles" data-restarts-manager class="inline-form"
+                          onsubmit="return confirm('Remove this log source from ossec.conf?');">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="entry_id" value="{{ item._id }}">
+                      <button type="submit" class="btn btn-danger btn-sm" title="Remove">
+                        <svg data-lucide="trash-2"></svg>
+                      </button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+              {% if not localfiles_list and not localfiles_list_error %}
+              <div class="glist-empty"><div class="empty-mini">No log sources configured yet.</div></div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!--
+            Service checks. This sits above the raw group-collector editor
+            because it is the task an operator actually comes here to do:
+            "tell me when X stops on Y". The wizard writes the three
+            coupled pieces (collector, decoder, rule) in one go; the editor
+            below remains for anyone who wants the raw XML.
+          -->
+          <div class="scard" id="checks-card">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="heart-pulse"></svg></span>
+              <div>
+                <h2 class="scard-title">Service checks</h2>
+                <p class="scard-desc">
+                  Watch a specific service on a group of agents and alert when it stops.
+                  Each check writes a collector, a decoder and a rule — without all three
+                  nothing fires.
+                </p>
+              </div>
+              <span class="prov manager" title="Writes a group's agent.conf plus decoder and rule files on the manager">
+                <svg data-lucide="server"></svg> Manager · 3 files
+              </span>
+            </div>
+
+            <div class="glist">
+              <div class="glist-row add-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">Watch a service</h3>
+                    <p class="scard-desc">Verify it exists first, then target a group.</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-primary btn-sm" id="check-add-toggle">
+                      <svg data-lucide="plus"></svg> New check
+                    </button>
+                  </div>
+                </div>
+
+                <div class="scard-body item-edit" id="check-wizard" hidden>
+                  <form method="post" action="/pipeline/service-checks" data-restarts-manager id="check-form">
+                    <input type="hidden" name="platform" id="chk-platform" value="linux">
+
+                    <!-- Step 1: does this service actually exist there? -->
+                    <div class="f2">
+                      <div class="f">
+                        <label for="chk-agent">1 · Check against which agent</label>
+                        <select id="chk-agent" class="mono" {{ "disabled" if not agents_list }}>
+                          {% for a in agents_list %}
+                            <option value="{{ a.id }}">{{ a.id }} · {{ a.name }}{% if a.status != 'active' %} ({{ a.status }}){% endif %}</option>
+                          {% endfor %}
+                          {% if not agents_list %}<option value="">— unavailable —</option>{% endif %}
+                        </select>
+                        {% if agents_list_error %}
+                          {# An empty dropdown alone reads as "no agents exist". #}
+                          <div class="hint" style="color: var(--warn);">
+                            The agent list could not be read: {{ agents_list_error }}
+                          </div>
+                        {% else %}
+                          <div class="hint">Used only to confirm the service exists and to pick the right command.</div>
+                        {% endif %}
+                      </div>
+                      <div class="f">
+                        <label for="chk-service">Service name</label>
+                        <div style="display:flex; gap:var(--s2);">
+                          <input type="text" id="chk-service" name="service" class="mono"
+                                 placeholder="sshd" autocomplete="off" style="flex:1;">
+                          <button type="button" class="btn btn-ghost btn-sm" id="chk-verify">
+                            <svg data-lucide="search"></svg> Verify
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="chk-verify-out" style="margin-bottom: var(--s4);"></div>
+
+                    <!-- Step 2 onwards, revealed once verification has run -->
+                    <div id="chk-rest" hidden>
+                      <div class="f2">
+                        <div class="f">
+                          <label for="chk-group">2 · Target group</label>
+                          <select id="chk-group" name="group" class="mono">
+                            {% for g in groups_list %}
+                              <option value="{{ g.name }}">{{ g.name }} ({{ g.count }} agent{{ "s" if g.count != 1 }})</option>
+                            {% endfor %}
+                            <option value="">— create a new group —</option>
+                          </select>
+                          <div class="hint">
+                            Only agents in this group run the check. Sending it to machines
+                            without the service is what produces false alerts.
+                          </div>
+                        </div>
+                        <div class="f" id="chk-newgroup-wrap" hidden>
+                          <label for="chk-newgroup">New group name</label>
+                          <input type="text" id="chk-newgroup" name="new_group" class="mono"
+                                 placeholder="linux_servers" autocomplete="off">
+                          <label class="switch" style="margin-top: var(--s3);">
+                            <input type="checkbox" id="chk-assign" name="assign_agent_id" value="">
+                            <span class="track"></span> Also add the agent above to it
+                          </label>
+                        </div>
+                      </div>
+
+                      <div class="f">
+                        <label for="chk-command">3 · Command</label>
+                        <input type="text" id="chk-command" name="command" class="mono">
+                        <div class="hint">Chosen for the agent's platform. Edit if your setup differs.</div>
+                      </div>
+
+                      <div class="f2">
+                        <div class="f">
+                          <label for="chk-alias">Alias <span class="soft">· ties the three pieces together</span></label>
+                          <input type="text" id="chk-alias" name="alias" class="mono" autocomplete="off">
+                        </div>
+                        <div class="f2" style="gap:var(--s3);">
+                          <div class="f">
+                            <label for="chk-frequency">Every <span class="soft">· seconds</span></label>
+                            <input type="text" id="chk-frequency" name="frequency" class="mono" value="60">
+                          </div>
+                          <div class="f">
+                            <label for="chk-level">Alert level</label>
+                            <input type="text" id="chk-level" name="level" class="mono" value="12">
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="notice">
+                        <svg data-lucide="info"></svg>
+                        <span>Saving writes three things: a <code>full_command</code> collector
+                        into the group's <code>agent.conf</code>, and a decoder and rule named
+                        <code>service_check_&lt;alias&gt;.xml</code>. Agents pick the collector
+                        up on their next sync, not immediately.</span>
+                      </div>
+
+                      <div class="item-form-actions">
+                        <button type="button" class="btn btn-ghost" id="check-cancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create check</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div id="checks-body">
+                <div class="glist-empty"><div class="empty-mini">Loading service checks…</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---------- Group collectors (agent.conf) ---------- -->
+          {% if groups_list_error %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">
+              Could not read the agent groups: {{ groups_list_error }}
+            </div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="boxes"></svg></span>
+              <div>
+                <h2 class="scard-title">Group collectors</h2>
+                <p class="scard-desc">
+                  What the <em>agents</em> collect, distributed per group. A check sent to
+                  machines that do not run the service produces false alerts, which is why
+                  this is targeted by group rather than sent to everyone.
+                </p>
+              </div>
+              <span class="prov manager" title="Written to each group's agent.conf on the manager">
+                <svg data-lucide="boxes"></svg> Group · agent.conf
+              </span>
+            </div>
+
+            <div class="glist">
+              {% for group in groups_list %}
+              <div class="glist-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="box"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">{{ group.name }}</h3>
+                    <p class="scard-desc">{{ group.count }} agent{{ "s" if group.count != 1 }}</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-ghost btn-sm"
+                            data-edit-toggle data-load-group="{{ group.name }}">
+                      <svg data-lucide="pencil"></svg> Edit agent.conf
+                    </button>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/pipeline/groups/{{ group.name }}/config">
+                    <div class="f">
+                      <label for="gc-{{ group.name }}">Shared agent configuration</label>
+                      <textarea id="gc-{{ group.name }}" name="content" class="mono" rows="12"
+                                spellcheck="false" data-group-content="{{ group.name }}"
+                                placeholder="Loading…"></textarea>
+                      <div class="hint">
+                        Wrapped in <code>&lt;agent_config&gt;</code>, not
+                        <code>&lt;ossec_config&gt;</code>. Agents pick it up on their next
+                        sync rather than immediately.
+                      </div>
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save configuration</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+              {% if not groups_list and not groups_list_error %}
+              <div class="glist-empty"><div class="empty-mini">No agent groups yet — create one from the Agents page.</div></div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- ---------- rsyslog ---------- -->
+          {% if rsyslog_files_list_error %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">
+              Could not read the rsyslog files: {{ rsyslog_files_list_error }}
+            </div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="network"></svg></span>
+              <div>
+                <h2 class="scard-title">Remote log intake</h2>
+                <p class="scard-desc">
+                  rsyslog rule files that let other machines send their logs to this manager.
+                </p>
+              </div>
+              <span class="prov host" title="Edits the manager's operating system, over SSH — not the Wazuh API">
+                <svg data-lucide="terminal"></svg> Host OS · SSH
+              </span>
+            </div>
+
+            <div class="glist">
+              <div class="glist-row add-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">Add an rsyslog file</h3>
+                    <p class="scard-desc">Creates <code>/etc/rsyslog.d/wazuh-*.conf</code> on the manager.</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-edit-toggle>
+                      <svg data-lucide="plus"></svg> Add new
+                    </button>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/pipeline/rsyslog" data-restarts-manager data-restart-scope="rsyslog">
+                    <input type="hidden" name="action" value="add">
+                    <div class="f">
+                      <label>File name <span class="soft">· must start with wazuh-</span></label>
+                      <input type="text" name="name" class="mono" placeholder="wazuh-tcp.conf">
+                      <div class="hint">The prefix marks the file as owned by this project.</div>
+                    </div>
+                    <div class="f">
+                      <label>Configuration</label>
+                      <textarea name="content" class="mono" rows="8" spellcheck="false"
+                                placeholder="module(load=&quot;imtcp&quot;)&#10;input(type=&quot;imtcp&quot; port=&quot;514&quot;)"></textarea>
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Add file</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {% for item in rsyslog_files_list %}
+              <div class="glist-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="file-cog"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">{{ item.name }}</h3>
+                    <p class="scard-desc">/etc/rsyslog.d/{{ item.name }}</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" data-edit-toggle>
+                      <svg data-lucide="pencil"></svg> Edit
+                    </button>
+                    <form method="post" action="/pipeline/rsyslog" data-restarts-manager data-restart-scope="rsyslog" class="inline-form"
+                          onsubmit="return confirm('Delete this rsyslog file from the manager?');">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="name" value="{{ item.name }}">
+                      <button type="submit" class="btn btn-danger btn-sm" title="Delete">
+                        <svg data-lucide="trash-2"></svg>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/pipeline/rsyslog" data-restarts-manager data-restart-scope="rsyslog">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="name" value="{{ item.name }}">
+                    <div class="f">
+                      <label>Configuration</label>
+                      <textarea name="content" class="mono" rows="10" spellcheck="false">{{ item.content }}</textarea>
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save changes</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+              {% if not rsyslog_files_list and not rsyslog_files_list_error %}
+              <div class="glist-empty"><div class="empty-mini">No rsyslog files configured yet.</div></div>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+        {% endif %}
+
+        {# ==================== PARSE ==================== #}
+        {% if tab == 'parse' %}
+        <div class="tab-panel active" role="tabpanel">
+
+          <p class="page-sub" style="margin:0 0 var(--s5);">
+            Decoders pull fields out of a raw log line; rules decide which of those
+            findings deserve an alert. A rule can only match what a decoder extracted.
+          </p>
+
+          {% for kind, label, directory, files, files_error, icon in [
+               ("decoder", "decoder", "/var/ossec/etc/decoders/", decoder_files_list, decoder_files_list_error, "braces"),
+               ("rule", "rule", "/var/ossec/etc/rules/", rule_files_list, rule_files_list_error, "list-checks"),
+             ] %}
+
+          {% if files_error %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">
+              Could not read the {{ label }} files: {{ files_error }}
+            </div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="{{ icon }}"></svg></span>
+              <div>
+                <h2 class="scard-title">Custom {{ label }}s</h2>
+                <p class="scard-desc">
+                  {% if kind == 'decoder' %}
+                    Extract fields from log lines Wazuh does not understand out of the box.
+                  {% else %}
+                    Decide which decoded events become alerts, and at what level.
+                  {% endif %}
+                </p>
+              </div>
+              <span class="prov manager" title="Files under {{ directory }} on the Wazuh manager">
+                <svg data-lucide="folder"></svg> Manager · {{ directory }}
+              </span>
+            </div>
+
+            <div class="glist">
+              <div class="glist-row add-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">Add a {{ label }} file</h3>
+                    <p class="scard-desc">Creates a new XML file in <code>{{ directory }}</code>.</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-edit-toggle>
+                      <svg data-lucide="plus"></svg> Add new
+                    </button>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/pipeline/files" data-restarts-manager enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="add">
+                    <input type="hidden" name="kind" value="{{ kind }}">
+                    <div class="f">
+                      <label>File name <span class="soft">· required</span></label>
+                      <input type="text" name="name" class="mono" placeholder="custom_{{ label }}s.xml">
+                    </div>
+                    <div class="f">
+                      <label>XML content</label>
+                      <textarea name="content" class="mono" rows="10" spellcheck="false"
+                                placeholder="{{ '<decoder name=&quot;custom&quot;>…</decoder>' if kind == 'decoder' else '<group name=&quot;custom,&quot;>…</group>' }}"></textarea>
+                    </div>
+                    <div class="f">
+                      <label>…or upload a .xml file <span class="soft">· wins over the text above</span></label>
+                      <input type="file" name="xml_file" accept=".xml">
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Add file</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {% for item in files %}
+              <div class="glist-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="file-code"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">{{ item.name }}</h3>
+                    <p class="scard-desc">
+                      {{ directory }}{{ item.name }}{% if item.status %} · {{ item.status }}{% endif %}
+                    </p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-ghost btn-sm"
+                            data-edit-toggle data-load-file="{{ kind }}/{{ item.name }}">
+                      <svg data-lucide="pencil"></svg> Edit
+                    </button>
+                    <form method="post" action="/pipeline/files" data-restarts-manager class="inline-form"
+                          onsubmit="return confirm('Delete {{ item.name }} from the manager?');">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="kind" value="{{ kind }}">
+                      <input type="hidden" name="name" value="{{ item.name }}">
+                      <button type="submit" class="btn btn-danger btn-sm" title="Delete">
+                        <svg data-lucide="trash-2"></svg>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/pipeline/files" data-restarts-manager enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="kind" value="{{ kind }}">
+                    <input type="hidden" name="name" value="{{ item.name }}">
+                    <div class="f">
+                      <label>XML content</label>
+                      {# Fetched on open: the file listing carries names only,
+                         so that showing this page does not cost one manager
+                         call per file. #}
+                      <textarea name="content" class="mono" rows="14" spellcheck="false"
+                                data-file-content="{{ kind }}/{{ item.name }}"
+                                placeholder="Loading…"></textarea>
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save changes</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+              {% if not files and not files_error %}
+              <div class="glist-empty"><div class="empty-mini">No custom {{ label }} files yet.</div></div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include "_restart_overlay.html" %}
+
+<script>
+(function () {
+  // ---- inline edit / add cards ----
+  document.querySelectorAll('[data-edit-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var card = btn.closest('[data-item-card]');
+      var region = card.querySelector('.item-edit');
+      var opening = region.hidden;
+      region.hidden = !opening;
+      if (opening) {
+        if (btn.dataset.loadFile) loadFile(card, btn.dataset.loadFile);
+        if (btn.dataset.loadGroup) loadGroup(card, btn.dataset.loadGroup);
+      }
+    });
+  });
+  document.querySelectorAll('[data-edit-cancel]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.closest('[data-item-card]').querySelector('.item-edit').hidden = true;
+    });
+  });
+
+  // ---- content fetched only when a file is opened ----
+  function fill(area, text) {
+    area.value = text;
+    area.placeholder = '';
+  }
+  function failed(area, message) {
+    area.placeholder = message;
+  }
+
+  function loadFile(card, ref) {
+    var area = card.querySelector('[data-file-content="' + ref + '"]');
+    if (!area || area.dataset.loaded) return;
+    area.dataset.loaded = '1';
+    fetch('/api/pipeline/files/' + ref)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { area.dataset.loaded = ''; failed(area, data.error); }
+        else fill(area, data.content);
+      })
+      .catch(function () {
+        area.dataset.loaded = '';
+        failed(area, 'Could not load this file — try again.');
+      });
+  }
+
+  function loadGroup(card, group) {
+    var area = card.querySelector('[data-group-content="' + group + '"]');
+    if (!area || area.dataset.loaded) return;
+    area.dataset.loaded = '1';
+    fetch('/api/pipeline/groups/' + group + '/config')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { area.dataset.loaded = ''; failed(area, data.error); }
+        else fill(area, data.content);
+      })
+      .catch(function () {
+        area.dataset.loaded = '';
+        failed(area, 'Could not load this configuration — try again.');
+      });
+  }
+
+  // ---- a log source is either a file or a command, never both ----
+  document.querySelectorAll('[data-localfile-form]').forEach(function (form) {
+    var select = form.querySelector('[data-lf-format]');
+    var fileFields = form.querySelector('[data-lf-file]');
+    var cmdFields = form.querySelector('[data-lf-command]');
+    if (!select) return;
+
+    function refresh() {
+      var isCommand = select.value === 'command' || select.value === 'full_command';
+      fileFields.hidden = isCommand;
+      cmdFields.hidden = !isCommand;
+      // Disabled fields are not submitted, so the irrelevant half never
+      // reaches the server as an empty string it would have to interpret.
+      fileFields.querySelectorAll('input').forEach(function (i) { i.disabled = isCommand; });
+      cmdFields.querySelectorAll('input').forEach(function (i) { i.disabled = !isCommand; });
+    }
+    select.addEventListener('change', refresh);
+    refresh();
+  });
+
+  // ---- service checks ----
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  var checksBody = document.getElementById('checks-body');
+  if (checksBody) {
+    // Loaded on demand: enumerating checks costs one manager call per
+    // group, which is not worth paying on every page open.
+    fetch('/api/pipeline/service-checks')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        if (!data.checks.length) {
+          checksBody.innerHTML =
+            '<div class="glist-empty"><div class="empty-mini">No service checks yet.</div></div>';
+          return;
+        }
+        checksBody.innerHTML = data.checks.map(function (c) {
+          return '' +
+            '<div class="glist-row"><div class="item-view">' +
+              '<span class="scard-ic"><svg data-lucide="heart-pulse"></svg></span>' +
+              '<div class="item-summary">' +
+                '<h3 class="scard-title">' + esc(c.alias) + '</h3>' +
+                '<p class="scard-desc">group <strong>' + esc(c.group) + '</strong>' +
+                ' · ' + esc(c.agents) + ' agent' + (c.agents === 1 ? '' : 's') +
+                ' · every ' + esc(c.frequency || '?') + 's' +
+                ' · <span class="mono">' + esc((c.command || '').slice(0, 60)) + '</span></p>' +
+              '</div>' +
+              '<div class="item-actions">' +
+                '<form method="post" action="/pipeline/service-checks/delete" data-restarts-manager class="inline-form" ' +
+                  'onsubmit="return confirm(\'Stop watching this service? The collector, decoder and rule are all removed.\');">' +
+                  '<input type="hidden" name="alias" value="' + esc(c.alias) + '">' +
+                  '<input type="hidden" name="group" value="' + esc(c.group) + '">' +
+                  '<button type="submit" class="btn btn-danger btn-sm" title="Remove check">' +
+                    '<svg data-lucide="trash-2"></svg></button>' +
+                '</form>' +
+              '</div>' +
+            '</div></div>';
+        }).join('');
+        if (window.lucide) lucide.createIcons();
+      })
+      .catch(function (e) {
+        checksBody.innerHTML =
+          '<div class="glist-empty"><div class="empty-mini">' +
+          esc('Could not read the service checks: ' + e.message) + '</div></div>';
+      });
+  }
+
+  // ---- the wizard ----
+  var wizard = document.getElementById('check-wizard');
+  if (wizard) {
+    var toggle = document.getElementById('check-add-toggle');
+    var cancel = document.getElementById('check-cancel');
+    var verifyBtn = document.getElementById('chk-verify');
+    var out = document.getElementById('chk-verify-out');
+    var rest = document.getElementById('chk-rest');
+    var groupSel = document.getElementById('chk-group');
+    var newGroupWrap = document.getElementById('chk-newgroup-wrap');
+    var assignBox = document.getElementById('chk-assign');
+
+    toggle.addEventListener('click', function () { wizard.hidden = !wizard.hidden; });
+    cancel.addEventListener('click', function () { wizard.hidden = true; });
+
+    groupSel.addEventListener('change', function () {
+      newGroupWrap.hidden = groupSel.value !== '';
+      // A blank <select> value means "create one", so the name field must
+      // carry the value the server reads - and must not submit when unused.
+      document.getElementById('chk-newgroup').disabled = groupSel.value !== '';
+    });
+    newGroupWrap.hidden = true;
+    document.getElementById('chk-newgroup').disabled = true;
+
+    verifyBtn.addEventListener('click', function () {
+      var agentId = document.getElementById('chk-agent').value;
+      var service = document.getElementById('chk-service').value.trim();
+      if (!service) { out.innerHTML = '<div class="msg msg-err">Enter a service name first.</div>'; return; }
+
+      out.innerHTML = '<div class="empty-mini">Checking the agent’s inventory… ' +
+        'this is the slowest call the manager has, so it can take a while.</div>';
+      verifyBtn.disabled = true;
+
+      fetch('/api/pipeline/service-checks/verify?agent_id=' +
+            encodeURIComponent(agentId) + '&service=' + encodeURIComponent(service))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) throw new Error(data.error);
+
+          document.getElementById('chk-platform').value = data.platform;
+          document.getElementById('chk-command').value = data.suggested_command;
+          document.getElementById('chk-alias').value = data.suggested_alias;
+          assignBox.value = agentId;
+
+          if (data.exact) {
+            var running = data.exact.running;
+            out.innerHTML =
+              '<div class="msg msg-ok" style="margin:0;">Found <strong>' +
+              esc(data.exact.name) + '</strong> on this agent — currently <strong>' +
+              esc(data.exact.state || 'unknown') + '</strong>.</div>' +
+              '<div class="hint" style="margin-top:var(--s2);">' +
+              esc(data.platform_label) + ' · last inventory scan ' +
+              esc(data.exact.scanned_at || 'unknown') +
+              '. That is when it was last <em>observed</em>, not its state right now.</div>';
+          } else {
+            // Never present a near-miss as the answer - see the note in
+            // services/agents.py::find_service.
+            out.innerHTML =
+              '<div class="msg msg-err" style="margin:0;">No service named <strong>' +
+              esc(service) + '</strong> in this agent’s inventory.</div>' +
+              '<div class="hint" style="margin-top:var(--s2);">' +
+              (data.candidates.length
+                ? 'Similar names found: <span class="mono">' +
+                  data.candidates.map(esc).join(', ') + '</span>. '
+                : '') +
+              'You can still create the check — the inventory may be stale, or the ' +
+              'service may be present on other agents in the target group.</div>';
+          }
+          rest.hidden = false;
+        })
+        .catch(function (e) {
+          out.innerHTML = '<div class="msg msg-err" style="margin:0;">' +
+            esc(e.message) + '</div>';
+          // Still let them proceed: a failed lookup is not proof of absence.
+          rest.hidden = false;
+        })
+        .finally(function () { verifyBtn.disabled = false; });
+    });
+  }
+
+  if (window.lucide) { lucide.createIcons(); }
+})();
+</script>
+</body>
+</html>

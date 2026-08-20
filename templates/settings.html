@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Console — Wazuh Console</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+<div class="shell">
+
+  {% include "_sidebar.html" %}
+
+  <div class="main">
+    <div class="main-inner" id="main-content" tabindex="-1">
+      <div class="settings-wrap" id="settings-root" data-initial-tab="{{ tab }}">
+
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Console</h1>
+            <p class="page-sub">
+              This application's own settings. Nothing here reconfigures the Wazuh
+              manager — for that, see Pipeline, Alerting, or Agents.
+            </p>
+          </div>
+        </div>
+
+        {# Both tabs are cheap - local JSON and a socket lookup, no manager
+           calls - so unlike Pipeline and Alerting this page can still keep
+           tab switching instant and client-side. #}
+        <div class="tabs" role="tablist" aria-label="Console sections">
+          <button type="button" class="tab-btn" data-tab="general" role="tab"
+                  id="tabbtn-general" aria-controls="tab-general">
+            <svg data-lucide="server"></svg> General
+          </button>
+          <button type="button" class="tab-btn" data-tab="plugins" role="tab"
+                  id="tabbtn-plugins" aria-controls="tab-plugins">
+            <svg data-lucide="package-check"></svg> Packages
+          </button>
+        </div>
+
+        {# ==================== GENERAL ==================== #}
+        <div class="tab-panel" id="tab-general" role="tabpanel" aria-labelledby="tabbtn-general">
+
+          {% if saved and tab == "general" %}
+            <div class="msg msg-ok" style="margin:0 0 var(--s4);">
+              Changes saved. Restart the console for them to take effect.
+            </div>
+          {% endif %}
+          {% if error and tab == "general" %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">{{ error }}</div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="server"></svg></span>
+              <div>
+                <h2 class="scard-title">Connection</h2>
+                <p class="scard-desc">
+                  The address and port this console listens on for the manager's webhooks.
+                </p>
+              </div>
+              <span class="prov local" title="Stored in this console's own data/settings.json — the manager is not contacted">
+                <svg data-lucide="hard-drive"></svg> This console
+              </span>
+            </div>
+            <div class="scard-body">
+              <form method="post" action="/settings" id="general-form">
+                <div class="f2">
+                  <div class="f">
+                    <label for="host">Host <span class="soft">· bind address</span></label>
+                    <input type="text" id="host" name="host" class="mono"
+                           placeholder="Blank = 0.0.0.0" value="{{ host }}">
+                  </div>
+                  <div class="f">
+                    <label for="port">Port</label>
+                    <input type="text" id="port" name="port" class="mono"
+                           placeholder="Blank = {{ current_port }}" value="{{ port }}">
+                  </div>
+                </div>
+                <div class="f">
+                  <label for="note">Note <span class="soft">· optional</span></label>
+                  <textarea id="note" name="note" rows="3"
+                            placeholder="e.g. Reported to the manager as http://192.168.X.X:5000/wazuh-webhook">{{ note }}</textarea>
+                  <div class="hint">A free-form reminder — handy for recording which address the manager was given.</div>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="network"></svg></span>
+              <div>
+                <h2 class="scard-title">Network</h2>
+                <p class="scard-desc">Addresses this machine currently answers on.</p>
+              </div>
+              <span class="prov local" title="Detected locally, read-only">
+                <svg data-lucide="hard-drive"></svg> This console
+              </span>
+            </div>
+            <div class="scard-body">
+              {% if local_ips %}
+                <div class="chips">
+                  {% for ip in local_ips %}<span class="chip">{{ ip }}</span>{% endfor %}
+                </div>
+              {% else %}
+                <div class="empty-mini">No address detected — check this machine's network connection.</div>
+              {% endif %}
+              <div class="hint" style="margin-top: var(--s4);">
+                On the Wazuh manager, point an integration's <code>hook_url</code> at one of
+                these addresses plus the port above{% if local_ips %} — for example
+                <code>http://{{ local_ips[0] }}:{{ port or current_port }}/wazuh-webhook</code>{% endif %}.
+                That integration is managed under <a href="/alerting?tab=integrations">Alerting</a>.
+              </div>
+            </div>
+          </div>
+
+          <div class="save-row">
+            <span class="save-note">
+              <svg data-lucide="info"></svg> Host and port changes apply after a restart.
+            </span>
+            <button type="submit" form="general-form" class="btn btn-primary">Save changes</button>
+          </div>
+
+        </div>
+
+        {# ==================== PACKAGES ==================== #}
+        <div class="tab-panel" id="tab-plugins" role="tabpanel" aria-labelledby="tabbtn-plugins">
+
+          {% if saved and tab == "plugins" %}
+            <div class="msg msg-ok" style="margin:0 0 var(--s4);">Changes saved.</div>
+          {% endif %}
+          {% if error and tab == "plugins" %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">{{ error }}</div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="package-check"></svg></span>
+              <div>
+                <h2 class="scard-title">System packages</h2>
+                <p class="scard-desc">
+                  Operating-system packages the SSH-backed features depend on. The status
+                  below is the last recorded check — opening this page never re-checks.
+                </p>
+              </div>
+              <span class="prov host" title="Checks and installs packages on the manager's operating system, over SSH">
+                <svg data-lucide="terminal"></svg> Host OS · SSH
+              </span>
+            </div>
+            <div class="scard-body">
+              <div class="chips">
+                {% for p in known_plugins %}
+                  {% set st = plugins_status.get(p) %}
+                  <span class="state-pill {{ 'on' if st and st.verified else 'off' }}">
+                    <span class="sdot"></span>
+                    {{ p }}:
+                    {% if st %}
+                      {{ "installed" if st.verified else "missing" }}{% if st.version %} · {{ st.version }}{% endif %} · checked {{ st.checked_at }}
+                    {% else %}
+                      never checked
+                    {% endif %}
+                  </span>
+                {% endfor %}
+              </div>
+              <div class="hint" style="margin-top: var(--s4);">
+                <code>postfix</code> delivers the manager's alert emails
+                (<a href="/alerting?tab=email">Alerting → Delivery</a>).
+                <code>rsyslog</code> lets other machines send logs to the manager
+                (<a href="/pipeline?tab=collect">Pipeline → Remote log intake</a>).
+              </div>
+            </div>
+          </div>
+
+          <div class="save-row">
+            <span class="save-note">
+              <svg data-lucide="info"></svg> Checking is a manual action — it never runs on its own.
+            </span>
+            <button type="button" class="btn btn-primary" id="manage-plugins-open">
+              <svg data-lucide="package-plus"></svg> Check &amp; install
+            </button>
+          </div>
+
+          <dialog id="manage-plugins-dialog">
+            <form method="post" action="/settings/plugins">
+              <h2 class="scard-title" style="margin-bottom: var(--s4);">Check &amp; install packages</h2>
+              <p class="scard-desc">
+                Selected packages are verified on the manager with <code>dpkg -s</code> and
+                installed with <code>apt-get</code> if missing. This updates the recorded status.
+              </p>
+              {% for p in known_plugins %}
+                <label class="switch" style="display:flex; margin-top: var(--s3);">
+                  <input type="checkbox" name="plugins" value="{{ p }}" checked>
+                  <span class="track"></span> {{ p }}
+                </label>
+              {% endfor %}
+              <div class="item-form-actions" style="margin-top: var(--s5);">
+                <button type="button" class="btn btn-ghost" id="manage-plugins-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary">Check &amp; install</button>
+              </div>
+            </form>
+          </dialog>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('settings-root');
+  var tabs = document.querySelectorAll('.tab-btn');
+  var panels = {
+    general: document.getElementById('tab-general'),
+    plugins: document.getElementById('tab-plugins'),
+  };
+
+  function activate(name) {
+    tabs.forEach(function (t) {
+      var isActive = t.dataset.tab === name;
+      t.classList.toggle('active', isActive);
+      t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      t.tabIndex = isActive ? 0 : -1;
+    });
+    Object.keys(panels).forEach(function (k) {
+      panels[k].classList.toggle('active', k === name);
+    });
+  }
+
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () {
+      activate(t.dataset.tab);
+      var url = new URL(window.location);
+      url.searchParams.set('tab', t.dataset.tab);
+      url.searchParams.delete('saved');
+      window.history.replaceState({}, '', url);
+    });
+    t.addEventListener('keydown', function (e) {
+      var next;
+      if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      else return;
+      e.preventDefault();
+      tabs[next].focus();
+      tabs[next].click();
+    });
+  });
+
+  activate(Object.prototype.hasOwnProperty.call(panels, root.dataset.initialTab)
+    ? root.dataset.initialTab : 'general');
+
+  var dialog = document.getElementById('manage-plugins-dialog');
+  var open = document.getElementById('manage-plugins-open');
+  var cancel = document.getElementById('manage-plugins-cancel');
+  if (dialog && open) open.addEventListener('click', function () { dialog.showModal(); });
+  if (dialog && cancel) cancel.addEventListener('click', function () { dialog.close(); });
+
+  if (window.lucide) { lucide.createIcons(); }
+})();
+</script>
+</body>
+</html>

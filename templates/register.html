@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create account — Wazuh Console</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="sb-logo"><svg data-lucide="shield-half"></svg></span>
+      <div>
+        <h1 class="auth-h">Wazuh Console</h1>
+        <p class="auth-p">Create an account to get started</p>
+      </div>
+    </div>
+
+    {% if error %}<div class="msg msg-err">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/register" class="auth-form">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required autofocus minlength="3" autocomplete="username">
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
+
+      <label for="password2">Confirm password</label>
+      <input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password">
+
+      <div class="auth-hint">Use at least 6 characters.</div>
+
+      <button type="submit" class="btn btn-primary">Create account</button>
+    </form>
+
+    <div class="auth-alt">Already have an account? <a href="/login">Log in</a></div>
+  </div>
+  <script>if (window.lucide) lucide.createIcons();</script>
+</body>
+</html>

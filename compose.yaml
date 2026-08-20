@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    image: wazuh-dashboard
+    container_name: wazuh-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env                      
+    environment:
+      WAZUH_SSH_KEY_PATH: /keys/mail_updater_key  
+    volumes:
+      - ./data:/app/data
+      - ./.ssh/mail_updater_key:/keys/mail_updater_key:ro
+      - ./data/app_logs:/app/data/app_logs
+      - ./data/config_backups:/app/data/config_backups

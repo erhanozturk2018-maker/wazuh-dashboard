@@ -1,0 +1,36 @@
+[build-system]
+requires = [
+    "setuptools>=69",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dashboard_core"
+version = "4.0.0"
+description = "Wazuh Alert Dashboard"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi>=0.139,<1.0",
+    "uvicorn[standard]>=0.51,<1.0",
+    "jinja2>=3.1,<4.0",
+    "python-dotenv>=1.2,<2.0",
+    "python-multipart>=0.0.32,<1.0",
+    "paramiko>=5.0,<6.0",
+    "requests>=2.34,<3.0",
+    # Promoted from the test extra to a runtime dependency: editing
+    # ossec.conf moved from the manager-side tool into the dashboard when
+    # the manager channel became the Wazuh API, and that editing goes
+    # through lxml (never regex - the file has multiple XML roots).
+    "lxml>=6.1,<7.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.1,<10.0",
+    "httpx2>=2.9,<3.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["dashboard_core*"]

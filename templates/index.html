@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wazuh Alert Dashboard</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/chart.umd.js"></script>
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+<div class="shell">
+
+  <!-- ============ Sidebar ============ -->
+  {% include "_sidebar.html" %}
+
+  <!-- ============ Main ============ -->
+  <div class="main">
+    <div class="main-inner" id="main-content" tabindex="-1">
+
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Overview</h1>
+          <p class="page-sub">Live alerts forwarded by the Wazuh manager to <code>/wazuh-webhook</code>.</p>
+        </div>
+        <span class="live-badge" id="live-badge"><span class="dot"></span> live · 2s</span>
+      </div>
+
+      <!-- KPI band -->
+      <div class="kpis">
+        <div class="kpi kpi-total">
+          <div class="kpi-top">
+            <span class="kpi-label">Total</span>
+            <span class="kpi-ic"><svg data-lucide="layers"></svg></span>
+          </div>
+          <div class="kpi-num" id="kpi-total">0</div>
+          <div class="kpi-hint">in selected range</div>
+        </div>
+        <div class="kpi kpi-crit">
+          <div class="kpi-top">
+            <span class="kpi-label">Critical</span>
+            <span class="kpi-ic"><svg data-lucide="siren"></svg></span>
+          </div>
+          <div class="kpi-num" id="kpi-high">0</div>
+          <div class="kpi-hint">level 10+</div>
+        </div>
+        <div class="kpi kpi-warn">
+          <div class="kpi-top">
+            <span class="kpi-label">Elevated</span>
+            <span class="kpi-ic"><svg data-lucide="triangle-alert"></svg></span>
+          </div>
+          <div class="kpi-num" id="kpi-mid">0</div>
+          <div class="kpi-hint">level 5–9</div>
+        </div>
+        <div class="kpi kpi-ok">
+          <div class="kpi-top">
+            <span class="kpi-label">Low</span>
+            <span class="kpi-ic"><svg data-lucide="shield-check"></svg></span>
+          </div>
+          <div class="kpi-num" id="kpi-low">0</div>
+          <div class="kpi-hint">level 0–4</div>
+        </div>
+      </div>
+
+      <!-- Analytics row -->
+      <div class="ana-row">
+        <div class="panel chart-panel">
+          <div class="panel-head">
+            <span class="panel-title">Alert volume</span>
+            <span class="panel-tag">per minute</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="chart"></canvas>
+            <div id="chart-empty" class="empty-mini chart-empty" style="display:none;">No data in this range yet.</div>
+          </div>
+        </div>
+
+        <div class="signal-col">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-title">Top rules</span>
+              <span class="panel-tag">by count</span>
+            </div>
+            <div id="list-rules" class="rank-list">
+              <div class="empty-mini">No data in this range yet.</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-title">Top source IPs</span>
+              <span class="panel-tag">by count</span>
+            </div>
+            <div id="list-ips" class="rank-list">
+              <div class="empty-mini">No data in this range yet.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts card -->
+      <div class="alerts-card">
+        <div class="alerts-head">
+          <span class="alerts-title">Alerts</span>
+          <span class="alerts-count" id="alert-count">0</span>
+          <span class="alerts-status" id="status-text">connecting…</span>
+        </div>
+
+        <div class="alerts-controls">
+          <input type="text" id="f-search" class="ctl ctl-search" placeholder="Search description, agent, rule, IP…">
+          <select id="f-level" class="ctl" aria-label="Filter by severity">
+            <option value="all">All levels</option>
+            <option value="high">Critical · 10+</option>
+            <option value="mid">Elevated · 5–9</option>
+            <option value="low">Low · 0–4</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <select id="f-agent" class="ctl" aria-label="Filter by agent">
+            <option value="all">All agents</option>
+          </select>
+          <div class="seg" role="group" aria-label="Time range">
+            <button type="button" class="seg-btn active" data-range="all">All</button>
+            <button type="button" class="seg-btn" data-range="5m">5m</button>
+            <button type="button" class="seg-btn" data-range="1h">1h</button>
+            <button type="button" class="seg-btn" data-range="24h">24h</button>
+          </div>
+
+          <div class="ctl-gap">
+            <label class="switch">
+              <input type="checkbox" id="auto-refresh" checked>
+              <span class="track"></span>
+              Auto-refresh
+            </label>
+            <button type="button" class="btn btn-ghost" id="btn-export"><svg data-lucide="download"></svg> CSV</button>
+            <button type="button" class="btn btn-danger" id="btn-clear"><svg data-lucide="trash-2"></svg> Clear</button>
+          </div>
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Received</th>
+                <th>Timestamp</th>
+                <th>Level</th>
+                <th>Rule</th>
+                <th>Description</th>
+                <th>Agent</th>
+                <th>Source IP</th>
+                <th>Groups</th>
+              </tr>
+            </thead>
+            <tbody id="alert-body">
+              <tr><td colspan="8">
+                <div class="tbl-empty">
+                  <div class="ei"><svg data-lucide="radar"></svg></div>
+                  <div class="et">Listening for alerts</div>
+                  <div class="es">Rows appear the moment the Wazuh manager forwards an event.</div>
+                </div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Announces newly arrived alerts to screen readers; the row flash/live
+     badge are the sighted equivalent. -->
+<div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Detail drawer -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Alert details">
+  <div class="drawer-head">
+    <span class="drawer-title">Alert details</span>
+    <button type="button" class="drawer-close" id="drawer-close" aria-label="Close">
+      <svg data-lucide="x"></svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<script>if (window.lucide) lucide.createIcons();</script>
+<script src="/static/js/app.js?v={{ asset_version('js/app.js') }}"></script>
+</body>
+</html>

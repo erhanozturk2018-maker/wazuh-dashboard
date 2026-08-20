@@ -1,0 +1,23 @@
+<!--
+  Add this block INSIDE the <ossec_config> ... </ossec_config> tags in
+  /var/ossec/etc/ossec.conf, right above the closing tag (</ossec_config>).
+
+  Replace hook_url with the IP address of the machine running your dashboard.
+-->
+
+<integration>
+  <name>custom-webhook</name>
+  <hook_url>http://192.168.X.X:5000/wazuh-webhook</hook_url>
+  <level>10</level>
+  <alert_format>json</alert_format>
+</integration>
+
+<!-- Optionally, add another block scoped to specific rule_ids -->
+<!--
+<integration>
+  <name>custom-webhook</name>
+  <hook_url>http://192.168.X.X:5000/wazuh-webhook</hook_url>
+  <rule_id>5710,5712,5902,5404</rule_id>
+  <alert_format>json</alert_format>
+</integration>
+-->

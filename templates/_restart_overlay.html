@@ -1,0 +1,124 @@
+{#
+  Blocking overlay for saves that trigger a restart on the manager side.
+
+  Included by the pages whose forms write ossec.conf, decoders, rules,
+  mail settings or rsyslog files - all of which restart something
+  afterwards so the change actually takes effect. That restart is slow
+  enough to be worth explaining rather than just waiting through: Wazuh
+  does not hot-reload configuration, so every one of these is a real
+  service bounce, not a signal or a file watch, and this deployment's
+  modest memory (docs/architecture/system-overview.md) makes a manager
+  restart in particular take noticeably longer than the "a few seconds"
+  a restart normally is. A plain POST with no feedback looks
+  indistinguishable from a hung page for the whole duration, and without
+  the reason an operator has no way to judge whether a bad experience is
+  "still working" or "actually stuck."
+
+  Two restart scopes exist and they are not the same wait, so the copy
+  is not either:
+    - full manager restart (the default) - wazuh-manager AND postfix,
+      always both (services/ssh_transport.py's restart-services.sh has no
+      way to restart one without the other). This is the slow one.
+    - rsyslog only (data-restart-scope="rsyslog" on the three rsyslog
+      forms in pipeline.html) - config-router-wrapper.sh's rsyslog branch
+      restarts rsyslog itself and returns without touching wazuh-manager
+      or postfix at all. Showing the manager-restart copy here would be
+      wrong, not just imprecise - it names services this save never
+      touches.
+
+  It is deliberately non-dismissable: the request is already in flight and
+  nothing the operator does here can cancel it, so offering a close button
+  would only invite them to navigate away mid-restart and lose the result.
+  The browser removes it on its own when the response arrives and the page
+  navigates.
+#}
+<div class="restart-scrim" id="restart-overlay" hidden
+     role="alertdialog" aria-live="assertive" aria-labelledby="restart-overlay-title">
+  <div class="restart-box">
+    <div class="restart-spinner" aria-hidden="true"></div>
+    <h2 class="restart-title" id="restart-overlay-title">Applying changes</h2>
+    <p class="restart-desc" id="restart-overlay-desc">
+      Wazuh does not apply configuration changes live, so this restarts the
+      Wazuh manager and Postfix together. That is normally under a minute;
+      this manager runs light on memory and can take longer under load.
+      Leaving this page will not stop it.
+    </p>
+  </div>
+</div>
+
+{#
+  The behaviour ships with the markup deliberately.
+
+  This lived in static/js/app.js first, which was wrong in a way that
+  looked right: app.js is the alert console's own script - polling, chart,
+  table - and neither Pipeline nor Alerting loads it. The listeners never
+  attached and the overlay never appeared, while everything about the
+  markup and CSS checked out. Keeping the two together means a page that
+  includes the overlay cannot end up without the code that shows it.
+#}
+<script>
+(function () {
+  var overlay = document.getElementById("restart-overlay");
+  if (!overlay) return;
+
+  var MANAGER_DESC = document.getElementById("restart-overlay-desc").textContent.trim();
+
+  // Keyed by a form's data-restart-scope. Absent/unrecognized falls back
+  // to "manager" - the default and by far the more common case.
+  var COPY = {
+    manager: {
+      title: "Applying changes",
+      desc: MANAGER_DESC,
+    },
+    rsyslog: {
+      title: "Restarting rsyslog",
+      desc: "This only restarts the rsyslog service, not the Wazuh manager " +
+            "or Postfix - it should take a few seconds. Leaving this page " +
+            "will not stop it.",
+    },
+  };
+
+  function show(scope) {
+    var copy = COPY[scope] || COPY.manager;
+    document.getElementById("restart-overlay-title").textContent = copy.title;
+    document.getElementById("restart-overlay-desc").textContent = copy.desc;
+    overlay.hidden = false;
+  }
+
+  /* Forms whose save restarts something server-side. The submit is NOT
+     intercepted - this only paints the overlay on the way out. The browser
+     tears it down when the response arrives and the page navigates, so
+     there is no "hide it again" path to get wrong. */
+  document.querySelectorAll("form[data-restarts-manager]").forEach(function (form) {
+    form.addEventListener("submit", function () { show(form.dataset.restartScope); });
+  });
+
+  /* The retry, offered when an automatic restart failed and the change is
+     on disk but not live. Delegated, because the banner is rendered by the
+     server on the next page load rather than existing up front. Always
+     the full manager+Postfix restart - POST /api/manager/restart has no
+     rsyslog-only mode, so there is no scope to read here. */
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-apply-changes]");
+    if (!btn) return;
+    ev.preventDefault();
+
+    show("manager");
+    fetch("/api/manager/restart", { method: "POST" })
+      .then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+      })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.body.error || "Restart failed.");
+        // Reload rather than just clearing the banner: the page should
+        // re-read whatever is now actually live.
+        window.location.reload();
+      })
+      .catch(function (e) {
+        overlay.hidden = true;
+        var banner = document.querySelector(".msg-warn.msg-action span");
+        if (banner) banner.textContent = "Could not restart the manager: " + e.message;
+      });
+  });
+})();
+</script>

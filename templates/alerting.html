@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alerting — Wazuh Console</title>
+<link rel="stylesheet" href="/static/css/style.css?v={{ asset_version('css/style.css') }}">
+<script src="/static/vendor/lucide.js"></script>
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+<div class="shell">
+
+  {% include "_sidebar.html" %}
+
+  <div class="main">
+    <div class="main-inner" id="main-content" tabindex="-1">
+      <div class="settings-wrap" id="alerting-root">
+
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Alerting</h1>
+            <p class="page-sub">
+              Once the manager decides something matters, who hears about it.
+            </p>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Alerting sections">
+          <a href="/alerting?tab=email" role="tab"
+             class="tab-btn {{ 'active' if tab == 'email' }}"
+             aria-selected="{{ 'true' if tab == 'email' else 'false' }}">
+            <svg data-lucide="mail"></svg> Email
+          </a>
+          <a href="/alerting?tab=integrations" role="tab"
+             class="tab-btn {{ 'active' if tab == 'integrations' }}"
+             aria-selected="{{ 'true' if tab == 'integrations' else 'false' }}">
+            <svg data-lucide="share-2"></svg> Integrations
+          </a>
+        </div>
+
+        {% if restart_failed %}
+          {# Written, not live. Deliberately not styled as an error: the
+             change IS saved, and calling it a failure would invite the
+             operator to re-apply something already applied. #}
+          <div class="msg msg-warn msg-action" style="margin:0 0 var(--s4);">
+            <span>{{ restart_failed_hint }}</span>
+            <button type="button" class="btn btn-sm" data-apply-changes>Apply changes</button>
+          </div>
+        {% elif saved %}
+          <div class="msg msg-ok" style="margin:0 0 var(--s4);">Changes saved.</div>
+        {% endif %}
+        {% if error %}
+          <div class="msg msg-err" style="margin:0 0 var(--s4);">{{ error }}</div>
+        {% endif %}
+
+        {# ==================== EMAIL ==================== #}
+        {% if tab == 'email' %}
+        <div class="tab-panel active" role="tabpanel">
+
+          {#
+            Two sections, in dependency order. They were separate tabs
+            before and looked interchangeable; they are not. Delivery is
+            the plumbing, rules are the policy, and a rule cannot deliver
+            anything through plumbing that is not working. The step
+            numbers and the note between them exist to make that
+            relationship visible rather than something to be inferred.
+          #}
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="send"></svg></span>
+              <div>
+                <div class="scard-titlerow">
+                  <h2 class="scard-title">1 · Delivery</h2>
+                </div>
+                <p class="scard-desc">
+                  <strong>How</strong> mail leaves this network — the relay, its credentials,
+                  and the addresses alerts are sent from and to by default.
+                </p>
+              </div>
+              <span class="prov host" title="Configures Postfix on the manager's operating system, over SSH — the Wazuh API cannot manage the host's mail system">
+                <svg data-lucide="terminal"></svg> Host OS · Postfix · SSH
+              </span>
+            </div>
+
+            <div class="scard-body">
+              <form method="post" action="/alerting/mail" data-restarts-manager id="mail-form">
+                <div class="f2">
+                  <div class="f">
+                    <label for="email_to">Default recipient</label>
+                    <input type="text" id="email_to" name="email_to" class="mono"
+                           value="{{ mail.email_to }}" placeholder="soc@company.com">
+                  </div>
+                  <div class="f">
+                    <label for="email_from">Sender</label>
+                    <input type="text" id="email_from" name="email_from" class="mono"
+                           value="{{ mail.email_from }}" placeholder="wazuh@company.com">
+                  </div>
+                </div>
+
+                <div class="f2">
+                  <div class="f">
+                    <label for="smtp_server">SMTP server</label>
+                    <input type="text" id="smtp_server" name="smtp_server" class="mono"
+                           value="{{ mail.smtp_server }}" placeholder="127.0.0.1">
+                    <div class="hint">Usually <code>127.0.0.1</code> — the local Postfix.</div>
+                  </div>
+                  <div class="f">
+                    <label for="email_maxperhour">Max emails per hour</label>
+                    <input type="text" id="email_maxperhour" name="email_maxperhour" class="mono"
+                           value="{{ mail.email_maxperhour }}" placeholder="12">
+                  </div>
+                </div>
+
+                <div class="f2">
+                  <div class="f">
+                    <label for="relayhost">Relay host</label>
+                    <input type="text" id="relayhost" name="relayhost" class="mono"
+                           value="{{ mail.relayhost }}" placeholder="[smtp.company.com]:587">
+                    <div class="hint">The authenticated external SMTP relay.</div>
+                  </div>
+                  <div class="f">
+                    <label for="sasl_user">Relay username</label>
+                    <input type="text" id="sasl_user" name="sasl_user" class="mono"
+                           value="{{ mail.sasl_user }}" placeholder="wazuh-relay">
+                  </div>
+                </div>
+
+                <div class="f2">
+                  <div class="f">
+                    <label for="sasl_pass">
+                      Relay password <span class="soft">· leave blank to keep the current one</span>
+                    </label>
+                    <input type="password" id="sasl_pass" name="sasl_pass" class="mono"
+                           autocomplete="new-password">
+                  </div>
+                  <div class="f">
+                    <label for="sasl_pass_confirm">Confirm password</label>
+                    <input type="password" id="sasl_pass_confirm" name="sasl_pass_confirm"
+                           class="mono" autocomplete="new-password">
+                  </div>
+                </div>
+
+                <div class="f">
+                  <label>Current password status</label>
+                  <span class="state-pill {{ 'on' if mail.sasl_pass_set else 'off' }}">
+                    <span class="sdot"></span>
+                    {{ "Configured" if mail.sasl_pass_set else "Not configured" }}
+                  </span>
+                  <div class="hint">
+                    The password is sent to the manager once, at save time, and is never
+                    written to this console's disk — only the fact that one is set.
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div class="save-row">
+            <span class="save-note">
+              <svg data-lucide="info"></svg>
+              Saving reconfigures Postfix on the manager and restarts it.
+            </span>
+            <button type="submit" form="mail-form" class="btn btn-primary">Save delivery</button>
+          </div>
+
+          <div class="hint" style="margin: var(--s6) 0 var(--s5); display:flex; gap:var(--s3); align-items:flex-start;">
+            <svg data-lucide="corner-down-right" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;opacity:.6;"></svg>
+            <span>
+              Delivery decides <strong>how</strong> mail gets out. The rules below decide
+              <strong>which</strong> alerts are worth sending. Rules do nothing at all
+              until delivery above is working.
+            </span>
+          </div>
+
+          {% if email_alerts_list_error %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">
+              Could not read the alert rules from the manager: {{ email_alerts_list_error }}
+            </div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="filter"></svg></span>
+              <div>
+                <div class="scard-titlerow">
+                  <h2 class="scard-title">2 · Alert rules</h2>
+                </div>
+                <p class="scard-desc">
+                  <strong>Which</strong> alerts get emailed, and to whom. Without any rule,
+                  the manager emails on its global level threshold alone.
+                </p>
+              </div>
+              <span class="prov manager" title="&lt;email_alerts&gt; blocks in ossec.conf, written through the Wazuh API">
+                <svg data-lucide="server"></svg> Manager · ossec.conf
+              </span>
+            </div>
+
+            <div class="glist">
+              <div class="glist-row add-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">Add an alert rule</h3>
+                    <p class="scard-desc">Narrow by level, rule group, rule id or event location.</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-edit-toggle>
+                      <svg data-lucide="plus"></svg> Add new
+                    </button>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/alerting/rules" data-restarts-manager>
+                    <input type="hidden" name="action" value="add">
+                    <div class="f2">
+                      <div class="f">
+                        <label>Recipient <span class="soft">· required</span></label>
+                        <input type="text" name="email_to" class="mono" placeholder="soc@company.com">
+                      </div>
+                      <div class="f">
+                        <label>Minimum level</label>
+                        <input type="text" name="level" class="mono" placeholder="10">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Rule group</label>
+                        <input type="text" name="rules_group" class="mono" placeholder="authentication_failed">
+                      </div>
+                      <div class="f">
+                        <label>Rule ID</label>
+                        <input type="text" name="rule_id" class="mono" placeholder="5710">
+                      </div>
+                    </div>
+                    <div class="f">
+                      <label>Event location</label>
+                      <input type="text" name="event_location" class="mono" placeholder="/var/log/auth.log">
+                    </div>
+                    <div class="f2">
+                      <label class="switch">
+                        <input type="checkbox" name="do_not_delay">
+                        <span class="track"></span> Send immediately
+                      </label>
+                      <label class="switch">
+                        <input type="checkbox" name="do_not_group">
+                        <span class="track"></span> Never batch together
+                      </label>
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Add rule</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {% for item in email_alerts_list %}
+              <div class="glist-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="bell"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">{{ item.email_to or "(no recipient)" }}</h3>
+                    <p class="scard-desc">
+                      level {{ item.level or "—" }}{% if item.rules_group %} · group {{ item.rules_group }}{% endif %}{% if item.rule_id %} · rule {{ item.rule_id }}{% endif %}
+                    </p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" data-edit-toggle>
+                      <svg data-lucide="pencil"></svg> Edit
+                    </button>
+                    <form method="post" action="/alerting/rules" data-restarts-manager class="inline-form"
+                          onsubmit="return confirm('Remove this alert rule from ossec.conf?');">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="id" value="{{ item._id }}">
+                      {# The position is transient - this states which
+                         recipient was at that position when the page was
+                         drawn, so a shifted list is refused, not misapplied. #}
+                      <input type="hidden" name="confirm_email_to" value="{{ item.email_to }}">
+                      <button type="submit" class="btn btn-danger btn-sm" title="Remove">
+                        <svg data-lucide="trash-2"></svg>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/alerting/rules" data-restarts-manager>
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="id" value="{{ item._id }}">
+                    <input type="hidden" name="confirm_email_to" value="{{ item.email_to }}">
+                    <div class="f2">
+                      <div class="f">
+                        <label>Recipient</label>
+                        <input type="text" name="email_to" class="mono" value="{{ item.email_to }}">
+                      </div>
+                      <div class="f">
+                        <label>Minimum level</label>
+                        <input type="text" name="level" class="mono" value="{{ item.level }}">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Rule group</label>
+                        <input type="text" name="rules_group" class="mono" value="{{ item.rules_group }}">
+                      </div>
+                      <div class="f">
+                        <label>Rule ID</label>
+                        <input type="text" name="rule_id" class="mono" value="{{ item.rule_id }}">
+                      </div>
+                    </div>
+                    <div class="f">
+                      <label>Event location</label>
+                      <input type="text" name="event_location" class="mono" value="{{ item.event_location }}">
+                    </div>
+                    <div class="f2">
+                      <label class="switch">
+                        <input type="checkbox" name="do_not_delay" {{ "checked" if item.do_not_delay }}>
+                        <span class="track"></span> Send immediately
+                      </label>
+                      <label class="switch">
+                        <input type="checkbox" name="do_not_group" {{ "checked" if item.do_not_group }}>
+                        <span class="track"></span> Never batch together
+                      </label>
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save changes</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+              {% if not email_alerts_list and not email_alerts_list_error %}
+              <div class="glist-empty">
+                <div class="empty-mini">
+                  No alert rules yet — the manager emails on its global level threshold alone.
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+        {% endif %}
+
+        {# ==================== INTEGRATIONS ==================== #}
+        {% if tab == 'integrations' %}
+        <div class="tab-panel active" role="tabpanel">
+
+          {% if integrations_list_error %}
+            <div class="msg msg-err" style="margin:0 0 var(--s4);">
+              Could not read the integrations from the manager: {{ integrations_list_error }}
+            </div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="webhook"></svg></span>
+              <div>
+                <h2 class="scard-title">Integrations</h2>
+                <p class="scard-desc">
+                  External services the manager forwards matching alerts to — including
+                  this console's own webhook.
+                </p>
+              </div>
+              <span class="prov manager" title="&lt;integration&gt; blocks in ossec.conf, written through the Wazuh API">
+                <svg data-lucide="server"></svg> Manager · ossec.conf
+              </span>
+            </div>
+
+            <div class="glist">
+              <div class="glist-row add-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="plus"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">Add an integration</h3>
+                    <p class="scard-desc">slack, pagerduty, virustotal, shuffle, maltiverse, or a custom one.</p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-primary btn-sm" data-edit-toggle>
+                      <svg data-lucide="plus"></svg> Add new
+                    </button>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/alerting/integrations" data-restarts-manager>
+                    <input type="hidden" name="action" value="add">
+                    <div class="f2">
+                      <div class="f">
+                        <label>Name <span class="soft">· required, identifies the block</span></label>
+                        <input type="text" name="name" class="mono" placeholder="slack" data-integration-name>
+                      </div>
+                      <div class="f">
+                        <label>Alert format <span class="soft">· required</span></label>
+                        <input type="text" name="alert_format" class="mono" placeholder="json">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Hook URL <span class="soft" data-hint="hook_url">· optional</span></label>
+                        <input type="text" name="hook_url" class="mono" placeholder="https://hooks.slack.com/...">
+                      </div>
+                      <div class="f">
+                        <label>API key <span class="soft" data-hint="api_key">· optional</span></label>
+                        <input type="text" name="api_key" class="mono">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Minimum level</label>
+                        <input type="text" name="level" class="mono" placeholder="10">
+                      </div>
+                      <div class="f">
+                        <label>Rule group</label>
+                        <input type="text" name="group" class="mono" placeholder="authentication_failed">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Rule ID</label>
+                        <input type="text" name="rule_id" class="mono" placeholder="5710">
+                      </div>
+                      <div class="f">
+                        <label>Event location</label>
+                        <input type="text" name="event_location" class="mono">
+                      </div>
+                    </div>
+                    <div class="f">
+                      <label>Options <span class="soft">· optional, raw</span></label>
+                      <input type="text" name="options" class="mono">
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Add integration</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {% for item in integrations_list %}
+              <div class="glist-row" data-item-card>
+                <div class="item-view">
+                  <span class="scard-ic"><svg data-lucide="webhook"></svg></span>
+                  <div class="item-summary">
+                    <h3 class="scard-title">{{ item.name }}</h3>
+                    <p class="scard-desc">
+                      {{ item.alert_format or "—" }}{% if item.level %} · level {{ item.level }}{% endif %}{% if item.hook_url %} · hook URL set{% endif %}{% if item.api_key %} · API key set{% endif %}
+                    </p>
+                  </div>
+                  <div class="item-actions">
+                    <button type="button" class="btn btn-ghost btn-sm" data-edit-toggle>
+                      <svg data-lucide="pencil"></svg> Edit
+                    </button>
+                    <form method="post" action="/alerting/integrations" data-restarts-manager class="inline-form"
+                          onsubmit="return confirm('Remove this integration from ossec.conf?');">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="original_name" value="{{ item.name }}">
+                      <button type="submit" class="btn btn-danger btn-sm" title="Remove">
+                        <svg data-lucide="trash-2"></svg>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+                <div class="scard-body item-edit" hidden>
+                  <form method="post" action="/alerting/integrations" data-restarts-manager>
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="original_name" value="{{ item.name }}">
+                    <div class="f">
+                      <label>Name <span class="soft">· identifies the block; renaming means remove and re-add</span></label>
+                      <input type="text" class="mono" value="{{ item.name }}" readonly>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Alert format</label>
+                        <input type="text" name="alert_format" class="mono" value="{{ item.alert_format }}">
+                      </div>
+                      <div class="f">
+                        <label>Minimum level</label>
+                        <input type="text" name="level" class="mono" value="{{ item.level }}">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Hook URL</label>
+                        <input type="text" name="hook_url" class="mono" value="{{ item.hook_url }}">
+                      </div>
+                      <div class="f">
+                        <label>API key</label>
+                        <input type="text" name="api_key" class="mono" value="{{ item.api_key }}">
+                      </div>
+                    </div>
+                    <div class="f2">
+                      <div class="f">
+                        <label>Rule ID</label>
+                        <input type="text" name="rule_id" class="mono" value="{{ item.rule_id }}">
+                      </div>
+                      <div class="f">
+                        <label>Rule group</label>
+                        <input type="text" name="group" class="mono" value="{{ item.group }}">
+                      </div>
+                    </div>
+                    <div class="f">
+                      <label>Event location</label>
+                      <input type="text" name="event_location" class="mono" value="{{ item.event_location }}">
+                    </div>
+                    <div class="f">
+                      <label>Options <span class="soft">· optional, raw</span></label>
+                      <input type="text" name="options" class="mono" value="{{ item.options }}">
+                    </div>
+                    <div class="item-form-actions">
+                      <button type="button" class="btn btn-ghost" data-edit-cancel>Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save changes</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+              {% if not integrations_list and not integrations_list_error %}
+              <div class="glist-empty"><div class="empty-mini">No integrations configured yet.</div></div>
+              {% endif %}
+            </div>
+          </div>
+
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include "_restart_overlay.html" %}
+
+<script>
+(function () {
+  document.querySelectorAll('[data-edit-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var region = btn.closest('[data-item-card]').querySelector('.item-edit');
+      region.hidden = !region.hidden;
+    });
+  });
+  document.querySelectorAll('[data-edit-cancel]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.closest('[data-item-card]').querySelector('.item-edit').hidden = true;
+    });
+  });
+
+  // Some integrations require a hook URL, others an API key. Naming one
+  // marks the field it needs as required, so the manager's rejection is
+  // pre-empted in the form rather than delivered as an error afterwards.
+  var HOOK_REQUIRED = ['slack', 'shuffle', 'maltiverse'];
+  var KEY_REQUIRED = ['pagerduty', 'virustotal', 'maltiverse'];
+  document.querySelectorAll('[data-integration-name]').forEach(function (nameInput) {
+    var form = nameInput.closest('form');
+    var hookHint = form.querySelector('[data-hint="hook_url"]');
+    var keyHint = form.querySelector('[data-hint="api_key"]');
+    var hookInput = form.querySelector('[name="hook_url"]');
+    var keyInput = form.querySelector('[name="api_key"]');
+
+    function refresh() {
+      var value = nameInput.value.trim().toLowerCase();
+      var needsHook = HOOK_REQUIRED.indexOf(value) !== -1;
+      var needsKey = KEY_REQUIRED.indexOf(value) !== -1;
+      if (hookHint) hookHint.textContent = needsHook ? '· required for ' + value : '· optional';
+      if (keyHint) keyHint.textContent = needsKey ? '· required for ' + value : '· optional';
+      if (hookInput) hookInput.required = needsHook;
+      if (keyInput) keyInput.required = needsKey;
+    }
+    nameInput.addEventListener('input', refresh);
+    refresh();
+  });
+
+  if (window.lucide) { lucide.createIcons(); }
+})();
+</script>
+</body>
+</html>
