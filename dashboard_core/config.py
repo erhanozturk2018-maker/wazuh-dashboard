@@ -49,6 +49,13 @@ HOST = os.environ.get("DASHBOARD_HOST", "0.0.0.0")
 PORT = int(os.environ.get("DASHBOARD_PORT", "5000"))
 MAX_ALERTS = int(os.environ.get("DASHBOARD_MAX_ALERTS", "500"))
 
+# ---- RAG assistant: a separate local service, not the Wazuh manager ----
+# Gated behind a feature flag (see DEFAULT_FEATURE_FLAGS below) - it is off
+# until an operator turns it on from Console > Features, so a dashboard
+# that has never heard of this service does not show a broken "Ask" tab.
+RAG_API_URL = (os.environ.get("RAG_API_URL") or "http://localhost:8000").rstrip("/")
+RAG_API_TIMEOUT = int(os.environ.get("RAG_API_TIMEOUT", "30"))
+
 # ================================================================
 # USER SYSTEM + SETTINGS (plain JSON files, no database)
 # ================================================================
@@ -80,6 +87,17 @@ DEFAULT_MAIL_SETTINGS = {
     "sasl_pass_set": False,
 }
 
+# ================================================================
+# FEATURE FLAGS (stored under the "features" sub-key of settings.json).
+# Every flag defaults to off. This is not a security boundary - anyone
+# with a session can flip it back on from Console > Features - it exists
+# so an optional integration does not appear in the UI on a dashboard
+# that has never been told the other service exists.
+# ================================================================
+DEFAULT_FEATURE_FLAGS = {
+    "rag_assistant": False,
+}
+
 # Shared Jinja2 environment - every route module renders through this one.
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -101,3 +119,24 @@ def asset_version(static_relpath: str) -> int:
 
 
 templates.env.globals["asset_version"] = asset_version
+
+
+def feature_enabled(name: str) -> bool:
+    """Reads a feature flag fresh, at template-render time.
+
+    A Jinja global rather than a value threaded through every route's own
+    context dict: `_sidebar.html` is included by every logged-in page, and
+    making it depend on a context key would mean every route that forgot
+    to pass it renders a sidebar silently missing the flag - the same
+    invisible-failure shape `_sidebar.html`'s own docstring warns about
+    for the active-nav-item logic. A global sidesteps that: any template
+    can call `feature_enabled('rag_assistant')` with no route involved.
+
+    Imports storage lazily - storage imports this module, so importing it
+    back at module load time would be circular.
+    """
+    from dashboard_core import storage
+    return bool(storage.load_feature_flags().get(name, False))
+
+
+templates.env.globals["feature_enabled"] = feature_enabled

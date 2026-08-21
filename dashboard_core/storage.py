@@ -82,6 +82,32 @@ def save_plugin_entries(entries: dict) -> None:
     save_json(config.SETTINGS_FILE, settings)
 
 
+def load_feature_flags() -> dict:
+    """Reads the 'features' sub-key of settings.json - dashboard-level
+    opt-in features unrelated to anything the manager does. Off by
+    default: a feature that talks to another local service should not
+    appear until an operator has deliberately turned it on."""
+    settings = load_json(config.SETTINGS_FILE, {})
+    flags = settings.get("features", {})
+    if not isinstance(flags, dict):
+        flags = {}
+    return {**config.DEFAULT_FEATURE_FLAGS, **flags}
+
+
+def save_feature_flags(flags: dict) -> None:
+    """Updates only the 'features' sub-key, leaving every other top-level
+    key (host/port/note, mail, plugins) untouched."""
+    if config.SETTINGS_FILE.exists():
+        settings = load_json(config.SETTINGS_FILE, {})
+        if not isinstance(settings, dict):
+            settings = {}
+    else:
+        config.SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        settings = {}
+    settings["features"] = flags
+    save_json(config.SETTINGS_FILE, settings)
+
+
 def load_users() -> dict:
     return load_json(config.USERS_FILE, {})
 

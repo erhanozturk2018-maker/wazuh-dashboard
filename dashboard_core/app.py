@@ -21,6 +21,7 @@ from dashboard_core.routes import auth as auth_routes
 from dashboard_core.routes import dashboard as dashboard_routes
 from dashboard_core.routes import manager as manager_routes
 from dashboard_core.routes import pipeline as pipeline_routes
+from dashboard_core.routes import rag as rag_routes
 from dashboard_core.routes import settings as settings_routes
 
 app = FastAPI(
@@ -55,3 +56,4 @@ app.include_router(alerting_routes.router)
 app.include_router(pipeline_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(manager_routes.router)
+app.include_router(rag_routes.router)

@@ -39,6 +39,10 @@
                   id="tabbtn-plugins" aria-controls="tab-plugins">
             <svg data-lucide="package-check"></svg> Packages
           </button>
+          <button type="button" class="tab-btn" data-tab="features" role="tab"
+                  id="tabbtn-features" aria-controls="tab-features">
+            <svg data-lucide="toggle-right"></svg> Features
+          </button>
         </div>
 
         {# ==================== GENERAL ==================== #}
@@ -206,6 +210,66 @@
 
         </div>
 
+        {# ==================== FEATURES ==================== #}
+        <div class="tab-panel" id="tab-features" role="tabpanel" aria-labelledby="tabbtn-features">
+
+          {% if saved and tab == "features" %}
+            <div class="msg msg-ok" style="margin:0 0 var(--s4);">Changes saved.</div>
+          {% endif %}
+
+          <div class="scard">
+            <div class="scard-head">
+              <span class="scard-ic"><svg data-lucide="toggle-right"></svg></span>
+              <div>
+                <h3 class="scard-title">Optional features</h3>
+                <p class="scard-desc">
+                  Integrations that are off until you turn them on. These are
+                  this console's own features - none of them change anything on
+                  the Wazuh manager.
+                </p>
+              </div>
+            </div>
+
+            <div class="scard-body">
+              <form method="post" action="/settings/features" id="features-form">
+                <div class="glist-row">
+                  <div class="item-view">
+                    <div class="item-summary">
+                      <h3 class="scard-title">RAG assistant</h3>
+                      <p class="scard-desc">
+                        Adds an <strong>Ask</strong> page to the sidebar for asking
+                        questions against your own ingested documents. Requires the
+                        assistant service to be running at
+                        <span class="mono">{{ rag_api_url }}</span>; set
+                        <span class="mono">RAG_API_URL</span> in the .env file to
+                        point somewhere else.
+                      </p>
+                    </div>
+                    <div class="item-actions">
+                      <label class="switch">
+                        <input type="checkbox" name="rag_assistant" value="1"
+                               {{ 'checked' if features.rag_assistant }}
+                               onchange="document.getElementById('features-form').submit();">
+                        <span class="track"></span>
+                        <span>{{ 'On' if features.rag_assistant else 'Off' }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                {# Submitted by the toggle itself - no separate Save button,
+                   because a single switch with a Save step invites leaving the
+                   page believing a change was applied when it was not. #}
+                <noscript>
+                  <div class="item-form-actions" style="margin-top: var(--s4);">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                  </div>
+                </noscript>
+              </form>
+            </div>
+          </div>
+
+        </div>
+
       </div>
     </div>
   </div>
@@ -218,6 +282,7 @@
   var panels = {
     general: document.getElementById('tab-general'),
     plugins: document.getElementById('tab-plugins'),
+    features: document.getElementById('tab-features'),
   };
 
   function activate(name) {

@@ -50,6 +50,20 @@
     </a>
   </nav>
 
+  {# Opt-in, off by default: Console > Features. A Jinja global rather
+     than a context key so no route has to remember to pass it - see
+     config.feature_enabled. The route itself re-checks the same flag;
+     hiding this link is presentation, not access control. #}
+  {% if feature_enabled('rag_assistant') %}
+    <div class="sb-section">Assistant</div>
+    <nav class="sb-nav">
+      <a href="/rag" class="sb-link {{ 'active' if path.startswith('/rag') }}"
+         {{ 'aria-current=page' if path.startswith('/rag') }}>
+        <svg data-lucide="sparkles"></svg> Ask
+      </a>
+    </nav>
+  {% endif %}
+
   <div class="sb-spacer"></div>
 
   <div class="sb-user">

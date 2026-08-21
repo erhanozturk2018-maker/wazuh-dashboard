@@ -1431,3 +1431,109 @@ dialog[open] { animation: rise .18s ease; }
 /* No reduced-motion override needed here: the global rule near the top of
    this file already disables every animation under that preference, and
    the overlay still reads as "busy" from its presence and text alone. */
+
+/* ================================================================
+   ASK (RAG assistant)
+   Opt-in page; see Console > Features. Built from the existing card /
+   control tokens rather than a new visual language - it is another
+   panel in the same console, not a separate product.
+   ================================================================ */
+.ask-row { display: flex; gap: var(--s3); align-items: stretch; }
+.ask-input { flex: 1; min-width: 0; height: 40px; font-size: 13.5px; }
+.ask-row .btn { flex: none; height: 40px; }
+
+.ask-thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s4);
+  font-size: 12.5px;
+  color: var(--mut);
+}
+.ask-spinner {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--acc);
+  animation: ask-spin .8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes ask-spin { to { transform: rotate(360deg); } }
+
+.ask-answer {
+  margin-top: var(--s5);
+  padding: var(--s5);
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.ask-answer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+.ask-answer-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Retrieved passages, collapsed by default - present for checking an
+   answer, not competing with it for attention. */
+.ask-sources-wrap { margin-top: var(--s4); border-top: 1px solid var(--line); padding-top: var(--s3); }
+.ask-sources-summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--mut);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ask-sources-summary::-webkit-details-marker { display: none; }
+.ask-sources-summary::before {
+  content: "B8";
+  font-size: 10px;
+  transition: transform .15s ease;
+}
+.ask-sources-wrap[open] .ask-sources-summary::before { transform: rotate(90deg); }
+.ask-sources-summary:hover { color: var(--ink); }
+.ask-sources-list { margin-top: var(--s3); display: flex; flex-direction: column; gap: var(--s3); }
+.ask-source {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--s3);
+  background: var(--panel);
+}
+.ask-source-head {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--acc-hi);
+  margin-bottom: 6px;
+}
+.ask-source-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--mut);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 8.5em;
+  overflow-y: auto;
+}
+.ask-answer-body {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  /* The service answers in plain text; honour its own line breaks
+     instead of collapsing them into one run-on paragraph. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Reserves the caret's width so the last line does not reflow by one
+     character when the typing effect finishes. */
+  min-height: 1.65em;
+}
