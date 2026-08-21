@@ -1,0 +1,15 @@
+# Optional add-on to compose.yaml: pulls in the RAG pipeline service so
+# both stacks start together.
+#
+# Plain `docker compose up` (no -f flag) still only picks up compose.yaml
+# by default and never touches this file, so nothing about the normal
+# wazuh-only workflow changes.
+#
+# To start both stacks:
+#     docker compose -f compose.with-rag.yaml up -d
+#
+# Requires ../rag_pipeline/compose.yaml to exist -- if the rag_pipeline
+# project isn't present on this machine, use plain compose.yaml instead.
+include:
+  - path: compose.yaml
+  - path: ../rag_pipeline/compose.yaml
