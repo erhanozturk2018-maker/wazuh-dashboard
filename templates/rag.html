@@ -8,7 +8,7 @@
 <script src="/static/vendor/lucide.js"></script>
 </head>
 <body>
-<a href="#main-content" class="skip-link">Skip to content</a>
+<a href="#ask-input" class="skip-link">Skip to the question box</a>
 <div class="shell">
 
   {% include "_sidebar.html" %}
@@ -16,122 +16,109 @@
   <div class="main">
     <div class="main-inner" id="main-content" tabindex="-1">
 
-      <div class="page-head">
-        <div>
-          <h1 class="page-title">Ask</h1>
-          <p class="page-sub">
-            Ask a question against your own ingested documents. Answers come from
-            those documents only — this does not query the Wazuh manager.
-          </p>
-        </div>
-      </div>
-
       {#
-        The service's own readiness, resolved server-side on render. Three
-        distinct states, deliberately not collapsed into one "unavailable":
-        an operator can act on each differently, and "it isn't working" with
-        no reason is the message this page exists to avoid.
+        No .scard on this page, on purpose - see the ASK block in
+        style.css. Every other page is a configuration surface and
+        borrowing its card layout made this one read as one too.
       #}
-      {% if status_error %}
-        <div class="msg msg-err" style="margin:0 0 var(--s4);">
-          The assistant service could not be reached. {{ status_error }}
-        </div>
-      {% elif not status.configured %}
-        <div class="msg msg-warn" style="margin:0 0 var(--s4);">
-          The assistant service is running but has no model API key configured,
-          so it cannot answer yet.
-        </div>
-      {% elif not status.chunks_available %}
-        <div class="msg msg-warn" style="margin:0 0 var(--s4);">
-          The assistant service is running but no documents have been ingested,
-          so there is nothing to answer from yet.
-        </div>
-      {% endif %}
+      <div class="ask-wrap">
 
-      {% set ready = status and status.configured and status.chunks_available %}
+        {# The page's heading lives here rather than in the empty state,
+           which is removed as soon as a question is asked - a page that
+           loses its only <h1> mid-session is a real regression for anyone
+           navigating by headings. Visible titling is done by the empty
+           state while it is present, and by the thread itself after. #}
+        <h1 class="sr-only">Ask</h1>
 
-      <div class="scard">
-        <div class="scard-head">
-          <span class="scard-ic"><svg data-lucide="sparkles"></svg></span>
-          <div>
-            <h2 class="scard-title">Question</h2>
-            <p class="scard-desc">One question at a time. Answers are not stored.</p>
+        {#
+          The service's own readiness, resolved server-side on render.
+          Three distinct states, deliberately not collapsed into one
+          "unavailable": an operator can act on each differently, and
+          "it isn't working" with no reason is what this page exists to
+          avoid.
+        #}
+        {% if status_error %}
+          <div class="msg msg-err" style="margin:0 0 var(--s4);">
+            The assistant service could not be reached. {{ status_error }}
           </div>
-          <span class="prov local" title="Answered by a separate local service, not the Wazuh manager">
-            <svg data-lucide="hard-drive"></svg> Assistant service
-          </span>
+        {% elif not status.configured %}
+          <div class="msg msg-warn" style="margin:0 0 var(--s4);">
+            The assistant service is running but has no model API key configured,
+            so it cannot answer yet.
+          </div>
+        {% elif not status.chunks_available %}
+          <div class="msg msg-warn" style="margin:0 0 var(--s4);">
+            The assistant service is running but no documents have been ingested,
+            so there is nothing to answer from yet.
+          </div>
+        {% endif %}
+
+        {% set ready = status and status.configured and status.chunks_available %}
+
+        {# Turns are appended here. The empty state lives inside it and is
+           removed on the first question. #}
+        <div class="ask-thread" id="ask-thread">
+          <div class="ask-empty" id="ask-empty">
+            <span class="ask-empty-ic"><svg data-lucide="sparkles"></svg></span>
+            <p class="ask-empty-title">Ask your documents</p>
+            <p class="ask-empty-sub">
+              Answers come from the documents you have ingested — not from the
+              Wazuh manager, and not from the open web.
+            </p>
+            {% if ready %}
+              <div class="ask-suggestions">
+                <button type="button" class="ask-suggestion" data-suggest>
+                  Where do custom decoders go, and why not in ruleset/?
+                </button>
+                <button type="button" class="ask-suggestion" data-suggest>
+                  How do I install the agent on macOS?
+                </button>
+                <button type="button" class="ask-suggestion" data-suggest>
+                  Which file sets the minimum alert level?
+                </button>
+              </div>
+            {% endif %}
+          </div>
         </div>
-        <div class="scard-body">
-          <form id="ask-form" autocomplete="off">
-            <div class="ask-row">
-              <input type="text" id="ask-input" name="query" class="ctl ask-input"
-                     placeholder="e.g. Where do custom decoders go, and why not in ruleset/?"
-                     aria-label="Your question"
-                     {{ 'disabled' if not ready }}>
-              <button type="submit" class="btn btn-primary" id="ask-send"
-                      {{ 'disabled' if not ready }} aria-label="Send question">
-                <svg data-lucide="send-horizontal"></svg> Ask
-              </button>
-            </div>
+
+        <div class="ask-thinking" id="ask-thinking" hidden>
+          <span class="ask-spinner" aria-hidden="true"></span>
+          <span>Searching your documents…</span>
+        </div>
+
+        <div id="ask-error" class="msg msg-err" style="margin:0 0 var(--s3);" hidden></div>
+
+        <div class="ask-composer">
+          <form class="ask-form" id="ask-form" autocomplete="off"
+                {{ 'aria-disabled=true' if not ready }}>
+            <textarea id="ask-input" name="query" class="ask-input" rows="1"
+                      placeholder="{{ 'Ask a question about your documents…' if ready else 'The assistant is not ready yet' }}"
+                      aria-label="Your question"
+                      {{ 'disabled' if not ready }}></textarea>
+            <button type="submit" class="btn btn-primary btn-sm" id="ask-send"
+                    {{ 'disabled' if not ready }} aria-label="Send question">
+              <svg data-lucide="send-horizontal"></svg> Ask
+            </button>
           </form>
 
-          {# Populated by JS. Hidden until there is something to show, so the
-             card does not carry an empty grey slab on first load. #}
-          <div id="ask-answer" class="ask-answer" hidden>
-            <div class="ask-answer-head">
-              <span class="ask-answer-label">Answer</span>
-            </div>
-            <div id="ask-answer-body" class="ask-answer-body"></div>
-
-            {# The passages the answer was built from. Worth showing rather
-               than hiding: an answer that looks wrong is usually a retrieval
-               problem, and naming the document and page is what lets an
-               operator check that themselves instead of just distrusting it. #}
-            <details id="ask-sources-wrap" class="ask-sources-wrap" hidden>
-              <summary class="ask-sources-summary">
-                <span id="ask-sources-count"></span>
-              </summary>
-              <div id="ask-sources-list" class="ask-sources-list"></div>
-            </details>
+          <div class="ask-foot">
+            {# Each request is independent - the service is stateless and
+               carries no memory between questions. Said plainly, because a
+               visible thread otherwise implies a follow-up will be
+               understood in context, and it will not. #}
+            <span>Each question is answered on its own — earlier ones are not remembered.</span>
+            {% if documents %}
+              <span class="ask-foot-docs">
+                Answering from:
+                {% for name, count in documents.items() %}
+                  <span class="chip">{{ name }} <span class="soft">· {{ count }}</span></span>
+                {% endfor %}
+              </span>
+            {% endif %}
           </div>
-
-          <div id="ask-thinking" class="ask-thinking" hidden>
-            <span class="ask-spinner" aria-hidden="true"></span>
-            <span>Searching your documents…</span>
-          </div>
-
-          <div id="ask-error" class="msg msg-err" style="margin: var(--s4) 0 0;" hidden></div>
         </div>
+
       </div>
-
-      {# What it actually knows, so a wrong-looking answer can be traced to a
-         missing document rather than guessed at. Read-only on purpose:
-         ingesting and deleting are the assistant service's own admin surface,
-         not this page's (see routes/rag.py). #}
-      <div class="scard">
-        <div class="scard-head">
-          <span class="scard-ic"><svg data-lucide="library"></svg></span>
-          <div>
-            <h2 class="scard-title">Indexed documents</h2>
-            <p class="scard-desc">
-              What the assistant can currently answer from, with the number of
-              chunks each document was split into.
-            </p>
-          </div>
-        </div>
-        <div class="scard-body">
-          {% if documents %}
-            <div class="chips">
-              {% for name, count in documents.items() %}
-                <span class="chip">{{ name }} <span class="soft">· {{ count }}</span></span>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="empty-mini">Nothing indexed yet.</div>
-          {% endif %}
-        </div>
-      </div>
-
     </div>
   </div>
 </div>
@@ -143,66 +130,105 @@
 
   var input = document.getElementById('ask-input');
   var send = document.getElementById('ask-send');
+  var thread = document.getElementById('ask-thread');
+  var empty = document.getElementById('ask-empty');
   var thinking = document.getElementById('ask-thinking');
-  var answer = document.getElementById('ask-answer');
-  var answerBody = document.getElementById('ask-answer-body');
-  var sourcesWrap = document.getElementById('ask-sources-wrap');
-  var sourcesCount = document.getElementById('ask-sources-count');
-  var sourcesList = document.getElementById('ask-sources-list');
   var errorBox = document.getElementById('ask-error');
 
   var typingTimer = null;
+  var reduceMotion = window.matchMedia &&
+                     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* The service answers in one shot - POST /ask returns the whole body,
-     there is no token stream to subscribe to. So this is a deliberate
-     re-reveal of text we already have, not real streaming: it makes a
-     long answer readable as it arrives rather than landing as a wall.
-     Kept fast (12ms/char) and skippable, because a typing effect that
-     outlasts the reader's patience is worse than no effect. */
-  function typeOut(el, text) {
-    clearInterval(typingTimer);
-    el.textContent = '';
-    var i = 0;
-    typingTimer = setInterval(function () {
-      // Several characters per tick: one-per-tick is too slow to finish a
-      // paragraph before the reader gives up and scrolls.
-      i += 3;
-      el.textContent = text.slice(0, i);
-      if (i >= text.length) {
-        clearInterval(typingTimer);
-        el.textContent = text;
-      }
-    }, 12);
+  /* ---- composer ---- */
+
+  // Grow to fit the question instead of scrolling a one-line box.
+  function autosize() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
   }
+  input.addEventListener('input', autosize);
 
-  function finishTyping() {
-    clearInterval(typingTimer);
-  }
-
-  // Clicking the answer completes it immediately - the effect must never
-  // stand between the reader and the text.
-  answer.addEventListener('click', function () {
-    if (answer.dataset.fullText) {
-      finishTyping();
-      answerBody.textContent = answer.dataset.fullText;
+  // Enter sends; Shift+Enter makes a new line. Standard for a composer,
+  // and the reason this is a textarea rather than an <input>.
+  input.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && !ev.shiftKey) {
+      ev.preventDefault();
+      form.requestSubmit();
     }
   });
 
-  /* Each source is {chunk_id, text, document_id, page_number, distance, ...}.
+  document.querySelectorAll('[data-suggest]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      input.value = btn.textContent.trim();
+      autosize();
+      form.requestSubmit();
+    });
+  });
+
+  /* ---- turns ---- */
+
+  function addQuestion(text) {
+    if (empty && empty.parentNode) empty.remove();
+    var turn = document.createElement('div');
+    turn.className = 'ask-turn';
+
+    var q = document.createElement('div');
+    q.className = 'ask-q';
+    q.textContent = text;
+    turn.appendChild(q);
+
+    thread.appendChild(turn);
+    return turn;
+  }
+
+  function addAnswer(turn, text, sources) {
+    var a = document.createElement('div');
+    a.className = 'ask-a';
+
+    var ic = document.createElement('span');
+    ic.className = 'ask-a-ic';
+    ic.setAttribute('aria-hidden', 'true');
+    ic.innerHTML = '<svg data-lucide="sparkles"></svg>';
+    a.appendChild(ic);
+
+    var main = document.createElement('div');
+    main.className = 'ask-a-main';
+
+    var body = document.createElement('div');
+    body.className = 'ask-a-body';
+    // Announced once, when typing finishes - see typeOut().
+    body.setAttribute('aria-live', 'polite');
+    main.appendChild(body);
+
+    var sourcesEl = buildSources(sources);
+    if (sourcesEl) main.appendChild(sourcesEl);
+
+    a.appendChild(main);
+    turn.appendChild(a);
+
+    if (window.lucide) lucide.createIcons({ nameAttr: 'data-lucide' });
+    typeOut(body, text);
+  }
+
+  /* Each source is {chunk_id, text, document_id, page_number, distance}.
      Built with DOM calls rather than an innerHTML string on purpose: this
      text comes from whatever documents were ingested, so it is untrusted
      input as far as this page is concerned, and textContent cannot smuggle
      markup into the page the way string concatenation can. */
-  function renderSources(list) {
-    sourcesList.textContent = '';
-    if (!Array.isArray(list) || !list.length) {
-      sourcesWrap.hidden = true;
-      return;
-    }
-    sourcesWrap.hidden = false;
-    sourcesWrap.open = false;
-    sourcesCount.textContent =
-      list.length === 1 ? '1 source passage' : list.length + ' source passages';
+  function buildSources(list) {
+    if (!Array.isArray(list) || !list.length) return null;
+
+    var details = document.createElement('details');
+    details.className = 'ask-sources';
+
+    var summary = document.createElement('summary');
+    summary.className = 'ask-sources-summary';
+    summary.textContent = list.length === 1
+      ? '1 source passage' : list.length + ' source passages';
+    details.appendChild(summary);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'ask-sources-list';
 
     list.forEach(function (s) {
       var item = document.createElement('div');
@@ -217,14 +243,62 @@
       head.textContent = where;
       item.appendChild(head);
 
-      var body = document.createElement('div');
-      body.className = 'ask-source-text';
-      body.textContent = s.text || '';
-      item.appendChild(body);
+      var text = document.createElement('div');
+      text.className = 'ask-source-text';
+      text.textContent = s.text || '';
+      item.appendChild(text);
 
-      sourcesList.appendChild(item);
+      wrap.appendChild(item);
     });
+
+    details.appendChild(wrap);
+    return details;
   }
+
+  /* The service answers in one shot - POST /ask returns the whole body,
+     there is no token stream to subscribe to. So this is a deliberate
+     re-reveal of text we already have, not real streaming: it makes a
+     long answer readable as it arrives rather than landing as a wall.
+     Skipped entirely under prefers-reduced-motion, and skippable by
+     clicking, because an effect that outlasts the reader's patience is
+     worse than no effect. */
+  function typeOut(el, text) {
+    clearInterval(typingTimer);
+
+    if (reduceMotion) {
+      el.textContent = text;
+      return;
+    }
+
+    el.dataset.fullText = text;
+    el.setAttribute('aria-busy', 'true');
+    el.textContent = '';
+    var i = 0;
+    typingTimer = setInterval(function () {
+      // Several characters per tick: one-per-tick is too slow to finish a
+      // paragraph before the reader gives up and scrolls.
+      i += 3;
+      el.textContent = text.slice(0, i);
+      if (i >= text.length) finishTyping(el);
+    }, 12);
+  }
+
+  function finishTyping(el) {
+    clearInterval(typingTimer);
+    if (el && el.dataset.fullText) {
+      el.textContent = el.dataset.fullText;
+      el.removeAttribute('aria-busy');
+    }
+  }
+
+  // Clicking a still-typing answer completes it - the effect must never
+  // stand between the reader and the text.
+  thread.addEventListener('click', function (ev) {
+    var body = ev.target.closest('.ask-a-body');
+    if (body) finishTyping(body);
+  });
+
+  /* ---- submit ---- */
 
   function setBusy(busy) {
     input.disabled = busy;
@@ -238,9 +312,11 @@
     if (!query) return;
 
     errorBox.hidden = true;
-    answer.hidden = true;
-    finishTyping();
+    var turn = addQuestion(query);
+    input.value = '';
+    autosize();
     setBusy(true);
+    thinking.scrollIntoView({ block: 'end', behavior: reduceMotion ? 'auto' : 'smooth' });
 
     var body = new FormData();
     body.append('query', query);
@@ -255,21 +331,22 @@
 
         // The service names its answer field; fall back to the whole body
         // rather than showing nothing if it ever changes shape.
-        var text = res.body.answer || res.body.response || JSON.stringify(res.body, null, 2);
-
-        answer.hidden = false;
-        answer.dataset.fullText = text;
-        renderSources(res.body.sources);
-        typeOut(answerBody, text);
-        input.value = '';
+        var text = res.body.answer || res.body.response ||
+                   JSON.stringify(res.body, null, 2);
+        addAnswer(turn, text, res.body.sources);
         input.focus();
       })
       .catch(function (e) {
         setBusy(false);
+        // The question stays in the thread with the failure attached to
+        // it, rather than vanishing and leaving a bare error banner.
         errorBox.hidden = false;
         errorBox.textContent = e.message;
+        input.focus();
       });
   });
+
+  if (!input.disabled) input.focus();
 })();
 </script>
 <script>if (window.lucide) lucide.createIcons({ nameAttr: 'data-lucide' });</script>

@@ -1432,83 +1432,192 @@ dialog[open] { animation: rise .18s ease; }
    this file already disables every animation under that preference, and
    the overlay still reads as "busy" from its presence and text alone. */
 
+
 /* ================================================================
    ASK (RAG assistant)
-   Opt-in page; see Console > Features. Built from the existing card /
-   control tokens rather than a new visual language - it is another
-   panel in the same console, not a separate product.
-   ================================================================ */
-.ask-row { display: flex; gap: var(--s3); align-items: stretch; }
-.ask-input { flex: 1; min-width: 0; height: 40px; font-size: 13.5px; }
-.ask-row .btn { flex: none; height: 40px; }
+   Opt-in page; see Console > Features.
 
-.ask-thinking {
+   This page deliberately does NOT use the .scard layout the rest of the
+   console uses. Every other page is a configuration surface - panels of
+   labelled fields you edit and save - and wearing that costume made this
+   one read as another settings form rather than as somewhere you ask a
+   question. Two concrete symptoms: the answer sat inside a config card,
+   and at the console's normal 1280px content width a paragraph ran ~180
+   characters per line, roughly triple a comfortable reading measure.
+
+   So: a single narrow reading column, turns instead of fields, and the
+   composer as the page's main object. Colours, radii, spacing and
+   controls are still the existing tokens - it is the same console, laid
+   out for reading rather than for editing.
+   ================================================================ */
+
+/* ~72ch at this font size. Prose, not a table: the constraint IS the
+   design here, which is why it is not --content-max. */
+.ask-wrap {
+  max-width: 780px;
+  margin: 0 auto;
   display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--s7) - var(--s8));
+}
+
+/* Turns grow downward; the composer is pinned under them. */
+.ask-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding-bottom: var(--s6);
+}
+
+/* ---- empty state ---------------------------------------------------
+   Centred in the space the thread will later occupy, so the page does
+   not open as a mostly-empty rectangle with content pinned to the top. */
+.ask-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: var(--s3);
-  margin-top: var(--s4);
-  font-size: 12.5px;
+  padding: var(--s8) 0;
   color: var(--mut);
 }
-.ask-spinner {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--line-2);
-  border-top-color: var(--acc);
-  animation: ask-spin .8s linear infinite;
-  flex-shrink: 0;
+.ask-empty-ic {
+  width: 44px; height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: var(--acc-tint);
+  border: 1px solid var(--acc-line);
+  color: var(--acc-hi);
+  margin-bottom: var(--s2);
 }
-@keyframes ask-spin { to { transform: rotate(360deg); } }
+.ask-empty-ic svg { width: 20px; height: 20px; }
+.ask-empty-title { font-size: 15px; font-weight: 800; color: var(--ink); margin: 0; }
+.ask-empty-sub { font-size: 12.5px; line-height: 1.6; margin: 0; max-width: 46ch; }
 
-.ask-answer {
-  margin-top: var(--s5);
-  padding: var(--s5);
-  background: var(--inset);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-}
-.ask-answer-head {
+/* Suggestions double as the empty state's only affordance, so they are
+   buttons, not decoration - clicking one asks it. */
+.ask-suggestions {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s3);
-  margin-bottom: var(--s3);
+  flex-wrap: wrap;
+  gap: var(--s2);
+  justify-content: center;
+  margin-top: var(--s4);
 }
-.ask-answer-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--faint);
+.ask-suggestion {
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .14s ease, color .14s ease, background .14s ease;
+}
+.ask-suggestion:hover {
+  border-color: var(--acc-line);
+  background: var(--acc-tint);
+  color: var(--ink);
+}
+.ask-suggestion:focus-visible {
+  outline: none;
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
-/* Retrieved passages, collapsed by default - present for checking an
-   answer, not competing with it for attention. */
-.ask-sources-wrap { margin-top: var(--s4); border-top: 1px solid var(--line); padding-top: var(--s3); }
+/* ---- turns ---------------------------------------------------------
+   The question is a quiet right-aligned bubble and the answer is plain
+   text at full width. Giving both equal chrome would make the reader
+   parse which is which; the asymmetry does that work instead. */
+.ask-turn { display: flex; flex-direction: column; gap: var(--s3); }
+
+.ask-q {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--acc-tint);
+  border: 1px solid var(--acc-line);
+  border-radius: var(--r-md) var(--r-md) 4px var(--r-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ask-a { display: flex; gap: var(--s3); align-items: flex-start; }
+.ask-a-ic {
+  flex: none;
+  width: 26px; height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--panel-3);
+  border: 1px solid var(--line-2);
+  color: var(--acc-hi);
+  margin-top: 1px;
+}
+.ask-a-ic svg { width: 13px; height: 13px; }
+.ask-a-main { min-width: 0; flex: 1; }
+
+.ask-a-body {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  /* The service answers in plain text; honour its own line breaks
+     instead of collapsing them into one run-on paragraph. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 1.7em;
+}
+
+/* ---- retrieved passages -------------------------------------------
+   Collapsed by default: present so a wrong-looking answer can be
+   checked, not competing with the answer for attention. */
+.ask-sources { margin-top: var(--s3); }
 .ask-sources-summary {
   cursor: pointer;
   font-size: 11.5px;
   font-weight: 700;
   color: var(--mut);
   list-style: none;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 3px 0;
 }
 .ask-sources-summary::-webkit-details-marker { display: none; }
 .ask-sources-summary::before {
-  content: "B8";
+  content: "\25B8";              /* ▸ - escaped so the glyph cannot be
+                                    mangled by a re-encode of this file */
   font-size: 10px;
   transition: transform .15s ease;
 }
-.ask-sources-wrap[open] .ask-sources-summary::before { transform: rotate(90deg); }
+.ask-sources[open] .ask-sources-summary::before { transform: rotate(90deg); }
 .ask-sources-summary:hover { color: var(--ink); }
-.ask-sources-list { margin-top: var(--s3); display: flex; flex-direction: column; gap: var(--s3); }
+.ask-sources-summary:focus-visible {
+  outline: none;
+  color: var(--ink);
+  box-shadow: 0 0 0 3px var(--ring);
+  border-radius: 4px;
+}
+.ask-sources-list {
+  margin-top: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
 .ask-source {
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: var(--s3);
-  background: var(--panel);
+  background: var(--panel-2);
 }
 .ask-source-head {
   font-family: var(--mono);
@@ -1525,15 +1634,87 @@ dialog[open] { animation: rise .18s ease; }
   max-height: 8.5em;
   overflow-y: auto;
 }
-.ask-answer-body {
-  font-size: 13.5px;
-  line-height: 1.65;
+
+/* ---- thinking ---- */
+.ask-thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  font-size: 12.5px;
+  color: var(--mut);
+  padding-left: calc(26px + var(--s3));   /* aligns with .ask-a-body */
+}
+.ask-spinner {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--acc);
+  animation: ask-spin .8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes ask-spin { to { transform: rotate(360deg); } }
+
+/* ---- composer ------------------------------------------------------
+   Sticky to the bottom of the viewport so it stays reachable as the
+   thread grows, which is what makes this feel like somewhere you talk
+   rather than a form you filled in once. */
+.ask-composer {
+  position: sticky;
+  bottom: 0;
+  padding: var(--s4) 0 var(--s2);
+  background: linear-gradient(to bottom, transparent, var(--bg) 22%);
+}
+.ask-form {
+  display: flex;
+  gap: var(--s2);
+  align-items: flex-end;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  padding: 8px 8px 8px var(--s4);
+  box-shadow: var(--shadow);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.ask-form:focus-within {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+/* A textarea, not an input: questions wrap, and JS grows it to fit. */
+.ask-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
   color: var(--ink);
-  /* The service answers in plain text; honour its own line breaks
-     instead of collapsing them into one run-on paragraph. */
-  white-space: pre-wrap;
-  word-break: break-word;
-  /* Reserves the caret's width so the last line does not reflow by one
-     character when the typing effect finishes. */
-  min-height: 1.65em;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.6;
+  resize: none;
+  padding: 7px 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.ask-input:focus { outline: none; }
+.ask-input::placeholder { color: var(--faint); }
+.ask-form .btn { flex: none; height: 34px; }
+.ask-form[aria-disabled="true"] { opacity: .55; }
+
+.ask-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s2);
+  padding-bottom: var(--s4);
+  font-size: 11px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+.ask-foot-docs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ask-foot .chip { font-size: 10.5px; padding: 2px 8px; }
+
+@media (max-width: 720px) {
+  .ask-q { max-width: 100%; }
+  .ask-foot { justify-content: flex-start; }
 }

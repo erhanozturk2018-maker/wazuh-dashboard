@@ -182,9 +182,10 @@ def test_an_unreachable_service_still_renders_the_page(authenticated_client, rag
     assert "could not be reached" in response.text.lower()
 
     # And it must not invite a question it cannot answer. Asserted on the
-    # input element itself: a bare `"disabled" in response.text` passes on
-    # the word appearing anywhere on the page, which is passing for the
-    # wrong reason.
+    # control itself: a bare `"disabled" in response.text` passes on the
+    # word appearing anywhere on the page, which is passing for the wrong
+    # reason. It is a <textarea> rather than an <input> because a question
+    # can wrap and the composer grows to fit it.
     import re
-    tag = re.search(r'<input[^>]*id="ask-input"[^>]*>', response.text, re.S)
+    tag = re.search(r'<textarea[^>]*id="ask-input"[^>]*>', response.text, re.S)
     assert tag and "disabled" in tag.group(0)
